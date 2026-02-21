@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"gopad/internal/execution"
+	"gopad/internal/lsp"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -49,9 +50,18 @@ type fakeApplication struct {
 	runStderrChunks     []string
 	canceledRunIDs      []string
 	cancelRunErr        error
-	startWorkerResp     runner.Worker
-	startWorkerErr      error
-	stopWorkerErr       error
+	startWorkerResp runner.Worker
+	startWorkerErr  error
+	stopWorkerErr   error
+	completionResp  []lsp.CompletionItem
+	completionErr   error
+	hoverResp       lsp.HoverResult
+	hoverErr        error
+	definitionResp  []lsp.Location
+	definitionErr   error
+	signatureResp   lsp.SignatureResult
+	signatureErr    error
+	lspStatus       lsp.StatusResult
 }
 
 func (f *fakeApplication) Start(ctx context.Context) error {
@@ -153,6 +163,44 @@ func (f *fakeApplication) StartProjectWorker(ctx context.Context, projectPath st
 func (f *fakeApplication) StopProjectWorker(ctx context.Context, projectPath string) error {
 	return f.stopWorkerErr
 }
+
+func (f *fakeApplication) StartLSP(ctx context.Context, projectPath string) error {
+	return nil
+}
+
+func (f *fakeApplication) StopLSP(ctx context.Context) error {
+	return nil
+}
+
+func (f *fakeApplication) SyncSnippetToLSP(ctx context.Context, content string) error {
+	return nil
+}
+
+func (f *fakeApplication) OpenSnippetInLSP(ctx context.Context, content string) error {
+	return nil
+}
+
+func (f *fakeApplication) LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error) {
+	return f.completionResp, f.completionErr
+}
+
+func (f *fakeApplication) LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error) {
+	return f.hoverResp, f.hoverErr
+}
+
+func (f *fakeApplication) LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error) {
+	return f.definitionResp, f.definitionErr
+}
+
+func (f *fakeApplication) LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error) {
+	return f.signatureResp, f.signatureErr
+}
+
+func (f *fakeApplication) LSPStatus(ctx context.Context) lsp.StatusResult {
+	return f.lspStatus
+}
+
+func (f *fakeApplication) SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler) {}
 
 func TestWailsBridgeRequiresStartup(t *testing.T) {
 	t.Parallel()

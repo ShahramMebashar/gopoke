@@ -16,6 +16,7 @@ import (
 	"gopad/internal/diagnostics"
 	"gopad/internal/execution"
 	"gopad/internal/formatting"
+	"gopad/internal/lsp"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -38,6 +39,7 @@ type Application struct {
 	store          *storage.Store
 	projects       *project.Service
 	workers        *runner.Manager
+	lspManager     *lsp.Manager
 	runMu          sync.Mutex
 	activeRuns     map[string]context.CancelFunc
 	telemetry      *telemetry.Recorder
@@ -80,6 +82,7 @@ func (a *Application) Start(ctx context.Context) error {
 
 	a.projects = project.NewService(a.store)
 	a.workers = runner.NewManager()
+	a.lspManager = lsp.NewManager()
 	a.activeRuns = make(map[string]context.CancelFunc)
 	a.startupMetrics = a.telemetry.MarkStartupComplete(startedAt)
 	a.logger.Info(
@@ -90,10 +93,13 @@ func (a *Application) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop currently does not need to release external resources.
+// Stop shuts down workers and LSP, then releases resources.
 func (a *Application) Stop(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("shutdown context: %w", err)
+	}
+	if a.lspManager != nil {
+		a.lspManager.Stop()
 	}
 	if a.workers != nil {
 		if err := a.workers.StopAll(ctx); err != nil {
@@ -672,6 +678,90 @@ func (a *Application) StopProjectWorker(ctx context.Context, projectPath string)
 		return fmt.Errorf("stop project worker: %w", err)
 	}
 	return nil
+}
+
+// StartLSP starts gopls for a project path.
+func (a *Application) StartLSP(ctx context.Context, projectPath string) error {
+	if a.lspManager == nil {
+		return fmt.Errorf("lsp manager not initialized")
+	}
+	resolvedPath, err := resolveInputPath(projectPath)
+	if err != nil {
+		return err
+	}
+	return a.lspManager.StartForProject(ctx, resolvedPath)
+}
+
+// StopLSP shuts down gopls.
+func (a *Application) StopLSP(ctx context.Context) error {
+	if a.lspManager == nil {
+		return nil
+	}
+	a.lspManager.Stop()
+	return nil
+}
+
+// SyncSnippetToLSP sends updated snippet content to gopls.
+func (a *Application) SyncSnippetToLSP(ctx context.Context, content string) error {
+	if a.lspManager == nil {
+		return nil
+	}
+	return a.lspManager.SyncSnippet(content)
+}
+
+// OpenSnippetInLSP sends didOpen for the snippet.
+func (a *Application) OpenSnippetInLSP(ctx context.Context, content string) error {
+	if a.lspManager == nil {
+		return nil
+	}
+	return a.lspManager.OpenSnippet(content)
+}
+
+// LSPCompletion returns completions at the given 1-based position.
+func (a *Application) LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error) {
+	if a.lspManager == nil {
+		return nil, nil
+	}
+	return a.lspManager.Completion(ctx, line, column)
+}
+
+// LSPHover returns hover info at the given 1-based position.
+func (a *Application) LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error) {
+	if a.lspManager == nil {
+		return lsp.HoverResult{}, nil
+	}
+	return a.lspManager.Hover(ctx, line, column)
+}
+
+// LSPDefinition returns definition location at the given 1-based position.
+func (a *Application) LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error) {
+	if a.lspManager == nil {
+		return nil, nil
+	}
+	return a.lspManager.Definition(ctx, line, column)
+}
+
+// LSPSignatureHelp returns signature help at the given 1-based position.
+func (a *Application) LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error) {
+	if a.lspManager == nil {
+		return lsp.SignatureResult{}, nil
+	}
+	return a.lspManager.SignatureHelp(ctx, line, column)
+}
+
+// LSPStatus returns current LSP readiness.
+func (a *Application) LSPStatus(ctx context.Context) lsp.StatusResult {
+	if a.lspManager == nil {
+		return lsp.StatusResult{Ready: false, Error: "lsp not initialized"}
+	}
+	return a.lspManager.Status()
+}
+
+// SetLSPDiagnosticHandler registers the callback for gopls diagnostics.
+func (a *Application) SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler) {
+	if a.lspManager != nil {
+		a.lspManager.SetDiagnosticHandler(handler)
+	}
 }
 
 func (a *Application) projectRecordByPath(ctx context.Context, projectPath string) (storage.ProjectRecord, error) {

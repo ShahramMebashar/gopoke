@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gopad/internal/execution"
+	"gopad/internal/lsp"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -63,6 +64,16 @@ type ApplicationService interface {
 	CancelRun(ctx context.Context, runID string) error
 	StartProjectWorker(ctx context.Context, projectPath string) (runner.Worker, error)
 	StopProjectWorker(ctx context.Context, projectPath string) error
+	StartLSP(ctx context.Context, projectPath string) error
+	StopLSP(ctx context.Context) error
+	SyncSnippetToLSP(ctx context.Context, content string) error
+	OpenSnippetInLSP(ctx context.Context, content string) error
+	LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error)
+	LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error)
+	LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error)
+	LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error)
+	LSPStatus(ctx context.Context) lsp.StatusResult
+	SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler)
 }
 
 // WailsBridge exposes backend methods to the Wails frontend.
