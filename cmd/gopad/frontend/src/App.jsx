@@ -2,14 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { go } from "@codemirror/lang-go";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { keymap } from "@codemirror/view";
+import { autocompletion } from "@codemirror/autocomplete";
+import { linter, lintGutter } from "@codemirror/lint";
+import { hoverTooltip, keymap } from "@codemirror/view";
 import {
   availableToolchains,
   cancelRun,
   chooseProjectDirectory,
+  completion,
+  definition,
   deleteProjectEnvVar,
   deleteProjectSnippet,
   formatSnippet,
+  hover,
+  lspStatus,
+  onLspDiagnostics,
   onRunStderrChunk,
   onRunStdoutChunk,
   openProject,
@@ -21,6 +28,7 @@ import {
   setProjectDefaultPackage,
   setProjectToolchain,
   setProjectWorkingDirectory,
+  syncSnippet,
   upsertProjectEnvVar,
 } from "./wailsBridge";
 
@@ -324,6 +332,52 @@ function readOpenWarnings(result) {
   return Array.isArray(result?.EnvLoadWarnings) ? result.EnvLoadWarnings : [];
 }
 
+function lspCompletionSource(context) {
+  const line = context.state.doc.lineAt(context.pos);
+  const lineNumber = line.number;
+  const column = context.pos - line.from + 1;
+
+  return completion(lineNumber, column)
+    .then((items) => {
+      if (!items || items.length === 0) return null;
+      return {
+        from: context.pos,
+        options: items.map((item) => ({
+          label: item.label || item.Label || "",
+          detail: item.detail || item.Detail || "",
+          type: item.kind || item.Kind || "text",
+          apply: item.insertText || item.InsertText || item.label || item.Label || "",
+          boost: item.sortText ? -parseInt(item.sortText, 10) || 0 : 0,
+        })),
+      };
+    })
+    .catch(() => null);
+}
+
+function lspHoverTooltip(view, pos) {
+  const line = view.state.doc.lineAt(pos);
+  const lineNumber = line.number;
+  const column = pos - line.from + 1;
+
+  return hover(lineNumber, column)
+    .then((result) => {
+      const contents = result?.contents || result?.Contents || "";
+      if (!contents) return null;
+      return {
+        pos,
+        above: true,
+        create() {
+          const dom = document.createElement("div");
+          dom.className = "cm-lsp-hover";
+          dom.style.cssText = "max-width:500px;padding:6px 10px;font-size:12px;white-space:pre-wrap;font-family:monospace;";
+          dom.textContent = contents;
+          return { dom };
+        },
+      };
+    })
+    .catch(() => null);
+}
+
 export default function App() {
   const [status, setStatus] = useState({ kind: "info", message: "Ready." });
   const [isBusy, setIsBusy] = useState(false);
@@ -502,6 +556,28 @@ export default function App() {
           Stderr: `${base.Stderr || ""}${streamChunk.chunk}`,
         };
       });
+    });
+    return () => cancel();
+  }, []);
+
+  // Debounced snippet sync to LSP
+  const syncTimerRef = useRef(null);
+  useEffect(() => {
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      syncSnippet(snippet).catch(() => {});
+    }, 300);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [snippet]);
+
+  // LSP diagnostics listener
+  const [lspDiagnostics, setLspDiagnostics] = useState([]);
+  useEffect(() => {
+    const cancel = onLspDiagnostics((payload) => {
+      const diags = payload?.diagnostics || payload?.Diagnostics || [];
+      setLspDiagnostics(diags);
     });
     return () => cancel();
   }, []);
@@ -1051,14 +1127,81 @@ export default function App() {
     });
   }, []);
 
+  const lintExtension = useMemo(() => {
+    return linter((view) => {
+      return lspDiagnostics
+        .map((d) => {
+          const line = d.line || d.Line || 1;
+          const col = d.column || d.Column || 1;
+          const endLine = d.endLine || d.EndLine || line;
+          const endCol = d.endColumn || d.EndColumn || col;
+          const severity = d.severity || d.Severity || "error";
+
+          if (line < 1 || line > view.state.doc.lines) return null;
+          const fromLine = view.state.doc.line(line);
+          const from = Math.min(fromLine.from + col - 1, fromLine.to);
+
+          let to = from;
+          if (endLine >= 1 && endLine <= view.state.doc.lines) {
+            const toLine = view.state.doc.line(endLine);
+            to = Math.min(toLine.from + endCol - 1, toLine.to);
+          }
+          if (to <= from) to = Math.min(from + 1, fromLine.to);
+
+          return {
+            from,
+            to,
+            severity: severity === "error" ? "error" : severity === "warning" ? "warning" : "info",
+            message: d.message || d.Message || "Unknown diagnostic",
+          };
+        })
+        .filter(Boolean);
+    }, { delay: 0 });
+  }, [lspDiagnostics]);
+
   const editorExtensions = useMemo(
     () => [
       go(),
+      autocompletion({
+        override: [lspCompletionSource],
+        activateOnTyping: true,
+      }),
+      hoverTooltip(lspHoverTooltip, { hideOnChange: true }),
+      lintGutter(),
       keymap.of([
         {
           key: "Mod-Enter",
           run: () => {
             void handleRunSnippet();
+            return true;
+          },
+        },
+        {
+          key: "F12",
+          run: (view) => {
+            const pos = view.state.selection.main.head;
+            const line = view.state.doc.lineAt(pos);
+            const lineNumber = line.number;
+            const column = pos - line.from + 1;
+            definition(lineNumber, column)
+              .then((locations) => {
+                if (!locations || locations.length === 0) return;
+                const loc = locations[0];
+                if (loc.uri && loc.uri.endsWith("/main.go")) {
+                  const targetLine = (loc.range?.start?.line || 0) + 1;
+                  const targetCol = (loc.range?.start?.character || 0);
+                  if (targetLine > 0 && targetLine <= view.state.doc.lines) {
+                    const lineInfo = view.state.doc.line(targetLine);
+                    const target = Math.min(lineInfo.from + targetCol, lineInfo.to);
+                    view.dispatch({
+                      selection: { anchor: target },
+                      scrollIntoView: true,
+                    });
+                    view.focus();
+                  }
+                }
+              })
+              .catch(() => {});
             return true;
           },
         },
@@ -1468,7 +1611,7 @@ export default function App() {
           <CodeMirror
             value={snippet}
             height="100%"
-            extensions={editorExtensions}
+            extensions={[...editorExtensions, lintExtension]}
             theme={oneDark}
             onChange={(value) => setSnippet(value)}
             onCreateEditor={(view) => {
@@ -1477,13 +1620,14 @@ export default function App() {
             basicSetup={{
               lineNumbers: true,
               highlightActiveLine: true,
-              autocompletion: true,
+              autocompletion: false,
             }}
           />
           <div className="editor-status">
             <span>{lineCount} lines</span>
             <span>{snippet.length} chars</span>
             {selectedSnippetId && <span>{snippetNameInput}</span>}
+            <span className="status-lsp">{lspDiagnostics.length > 0 ? `${lspDiagnostics.length} LSP issues` : ""}</span>
             <span className="status-spacer" />
             <span className={`status-run-state ${runState}`}>{runStateLabel(runState)}</span>
             {runResult && runResult.DurationMS != null && (

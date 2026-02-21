@@ -111,3 +111,45 @@ export function onRunStderrChunk(callback) {
   }
   return () => {};
 }
+
+// --- LSP bridge functions ---
+
+export async function completion(line, column) {
+  return requireBridge().Completion(line, column);
+}
+
+export async function hover(line, column) {
+  return requireBridge().Hover(line, column);
+}
+
+export async function definition(line, column) {
+  return requireBridge().Definition(line, column);
+}
+
+export async function signatureHelp(line, column) {
+  return requireBridge().SignatureHelp(line, column);
+}
+
+export async function syncSnippet(content) {
+  return requireBridge().SyncSnippet(content);
+}
+
+export async function lspStatus() {
+  return requireBridge().LSPStatus();
+}
+
+export function onLspDiagnostics(callback) {
+  const runtime = runtimeApi();
+  if (!runtime || typeof runtime.EventsOn !== "function") {
+    return () => {};
+  }
+
+  const cancel = runtime.EventsOn("gopad:lsp:diagnostics", callback);
+  if (typeof cancel === "function") {
+    return cancel;
+  }
+  if (typeof runtime.EventsOff === "function") {
+    return () => runtime.EventsOff("gopad:lsp:diagnostics");
+  }
+  return () => {};
+}

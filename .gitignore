@@ -5,3 +5,4 @@ cmd/gopad/frontend/node_modules/
 cmd/gopad/frontend/.vite/
 node_modules/
 artifacts/
+.gopad-lsp-workspace/
