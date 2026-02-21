@@ -1,0 +1,5 @@
+panic: boom
+
+goroutine 1 [running]:
+main.main()
+	C:\Users\tester\project\main.go:44 +0x59

@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Lint (go vet)
+        run: go vet ./...
+
+      - name: Unit tests (excluding FR acceptance suite)
+        run: |
+          packages="$(go list ./... | grep -v 'gopad/internal/acceptance$')"
+          go test $packages
+
+      - name: FR acceptance report
+        run: ./scripts/run-fr-acceptance.sh artifacts
+
+      - name: Upload FR acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gp-038-fr-acceptance-report
+          path: |
+            artifacts/gp-038-fr-acceptance-report.md
+            artifacts/gp-038-fr-acceptance.log
+
+      - name: NFR benchmark report
+        run: ./scripts/run-nfr-benchmarks.sh artifacts
+
+      - name: Upload NFR benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gp-039-nfr-benchmark-report
+          path: |
+            artifacts/gp-039-nfr-benchmarks-report.md
+            artifacts/gp-039-nfr-benchmarks.log
+
+      - name: Run/cancel stress report
+        run: ./scripts/run-run-cancel-stress.sh artifacts
+
+      - name: Upload run/cancel stress report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gp-040-run-cancel-stress-report
+          path: |
+            artifacts/gp-040-run-cancel-stress-report.md
+            artifacts/gp-040-run-cancel-stress.log

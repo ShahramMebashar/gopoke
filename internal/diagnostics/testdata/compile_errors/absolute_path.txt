@@ -1,0 +1,3 @@
+/Users/tester/work/main.go:9:10: not enough arguments in call to handler
+	have ()
+	want (context.Context)

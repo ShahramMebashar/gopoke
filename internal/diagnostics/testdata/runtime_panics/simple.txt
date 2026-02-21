@@ -1,0 +1,8 @@
+panic: index out of range [3] with length 3
+
+goroutine 1 [running]:
+main.main()
+	/var/folders/a1/b2/example/main.go:17 +0x88
+main.wrapper()
+	/var/folders/a1/b2/example/wrapper.go:31 +0x20
+exit status 2

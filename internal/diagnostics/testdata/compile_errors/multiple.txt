@@ -1,0 +1,3 @@
+# command-line-arguments
+./main.go:14:2: undefined: missingValue
+./main.go:27:18: cannot use "abc" (untyped string constant) as int value in argument to sum
