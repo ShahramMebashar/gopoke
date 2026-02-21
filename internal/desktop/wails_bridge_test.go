@@ -523,6 +523,62 @@ func TestWailsBridgeProjectWorkerLifecycle(t *testing.T) {
 	}
 }
 
+func TestWailsBridgeLSPCompletion(t *testing.T) {
+	t.Parallel()
+
+	bridge := NewWailsBridge(&fakeApplication{
+		completionResp: []lsp.CompletionItem{
+			{Label: "Println", Detail: "func(a ...any)", Kind: "function", InsertText: "Println"},
+		},
+	})
+	bridge.Startup(context.Background())
+
+	items, err := bridge.Completion(5, 10)
+	if err != nil {
+		t.Fatalf("Completion() error = %v", err)
+	}
+	if got, want := len(items), 1; got != want {
+		t.Fatalf("len(items) = %d, want %d", got, want)
+	}
+	if got, want := items[0].Label, "Println"; got != want {
+		t.Fatalf("items[0].Label = %q, want %q", got, want)
+	}
+}
+
+func TestWailsBridgeLSPHover(t *testing.T) {
+	t.Parallel()
+
+	bridge := NewWailsBridge(&fakeApplication{
+		hoverResp: lsp.HoverResult{Contents: "func Println(a ...any)"},
+	})
+	bridge.Startup(context.Background())
+
+	hover, err := bridge.Hover(5, 10)
+	if err != nil {
+		t.Fatalf("Hover() error = %v", err)
+	}
+	if got, want := hover.Contents, "func Println(a ...any)"; got != want {
+		t.Fatalf("hover.Contents = %q, want %q", got, want)
+	}
+}
+
+func TestWailsBridgeLSPStatus(t *testing.T) {
+	t.Parallel()
+
+	bridge := NewWailsBridge(&fakeApplication{
+		lspStatus: lsp.StatusResult{Ready: true},
+	})
+	bridge.Startup(context.Background())
+
+	status, err := bridge.LSPStatus()
+	if err != nil {
+		t.Fatalf("LSPStatus() error = %v", err)
+	}
+	if !status.Ready {
+		t.Fatal("status.Ready = false, want true")
+	}
+}
+
 func TestWailsBridgeCancelRun(t *testing.T) {
 	t.Parallel()
 
