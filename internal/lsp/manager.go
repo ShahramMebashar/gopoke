@@ -20,16 +20,17 @@ type DiagnosticHandler func(event DiagnosticEvent)
 
 // Manager owns the gopls process lifecycle per project.
 type Manager struct {
-	mu          sync.RWMutex
-	client      *client
-	workspace   *workspace
-	process     *os.Process
-	projectPath string
-	ready       bool
-	lastError   string
-	logger      *slog.Logger
-	onDiag      DiagnosticHandler
-	done        chan struct{}
+	mu            sync.RWMutex
+	client        *client
+	workspace     *workspace
+	process       *os.Process
+	projectPath   string
+	ready         bool
+	snippetOpened bool
+	lastError     string
+	logger        *slog.Logger
+	onDiag        DiagnosticHandler
+	done          chan struct{}
 }
 
 // NewManager creates an LSP manager.
@@ -166,11 +167,29 @@ func (m *Manager) OpenSnippet(content string) error {
 }
 
 // SyncSnippet sends didChange for updated snippet content.
+// On the first call it automatically sends didOpen first.
 func (m *Manager) SyncSnippet(content string) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if !m.ready || m.client == nil || m.workspace == nil {
 		return nil // silently skip if not ready
+	}
+
+	// Auto-open the snippet file on first sync
+	if !m.snippetOpened {
+		version := m.workspace.syncSnippet(content)
+		if err := m.client.notify("textDocument/didOpen", didOpenTextDocumentParams{
+			TextDocument: textDocumentItem{
+				URI:        m.workspace.snippetURI(),
+				LanguageID: "go",
+				Version:    version,
+				Text:       content,
+			},
+		}); err != nil {
+			return err
+		}
+		m.snippetOpened = true
+		return nil
 	}
 
 	version := m.workspace.syncSnippet(content)
@@ -390,6 +409,7 @@ func (m *Manager) stopLocked() {
 
 	m.client = nil
 	m.ready = false
+	m.snippetOpened = false
 	m.projectPath = ""
 }
 
