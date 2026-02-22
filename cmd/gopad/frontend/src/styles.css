@@ -216,36 +216,11 @@ h3 {
   overflow: hidden;
 }
 
-/* react-codemirror wrapper div between .editor-pane and .cm-editor */
+/* Monaco editor wrapper fills the editor pane */
 .editor-pane > div:not(.editor-status) {
   flex: 1;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
   overflow: hidden;
-}
-
-.editor-pane .cm-editor {
-  flex: 1;
-  border: none;
-  border-radius: 0;
-  overflow: hidden;
-  background: #0d1724;
-}
-
-.editor-pane .cm-editor .cm-scroller {
-  overflow: auto;
-}
-
-.editor-pane .cm-editor .cm-gutters {
-  background: #0d1724;
-  border-right: none;
-  min-width: auto;
-}
-
-.editor-pane .cm-editor .cm-lineNumbers .cm-gutterElement {
-  padding: 0 4px 0 8px;
-  min-width: auto;
 }
 
 .editor-status {

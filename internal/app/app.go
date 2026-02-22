@@ -110,9 +110,6 @@ func (a *Application) Stop(ctx context.Context) error {
 	if a.scratchDir != "" {
 		os.RemoveAll(a.scratchDir)
 	}
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("shutdown context: %w", err)
-	}
 	if a.lspManager != nil {
 		a.lspManager.Stop()
 	}
@@ -735,52 +732,20 @@ func (a *Application) StopLSP(ctx context.Context) error {
 	return nil
 }
 
-// SyncSnippetToLSP sends updated snippet content to gopls.
-func (a *Application) SyncSnippetToLSP(ctx context.Context, content string) error {
+// LSPWebSocketPort returns the WebSocket proxy port for monaco-languageclient.
+func (a *Application) LSPWebSocketPort(ctx context.Context) int {
 	if a.lspManager == nil {
-		return nil
+		return 0
 	}
-	return a.lspManager.SyncSnippet(content)
+	return a.lspManager.Port()
 }
 
-// OpenSnippetInLSP sends didOpen for the snippet.
-func (a *Application) OpenSnippetInLSP(ctx context.Context, content string) error {
+// LSPWorkspaceInfo returns workspace details for the frontend LSP client.
+func (a *Application) LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInfo {
 	if a.lspManager == nil {
-		return nil
+		return lsp.WorkspaceInfo{}
 	}
-	return a.lspManager.OpenSnippet(content)
-}
-
-// LSPCompletion returns completions at the given 1-based position.
-func (a *Application) LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error) {
-	if a.lspManager == nil {
-		return nil, nil
-	}
-	return a.lspManager.Completion(ctx, line, column)
-}
-
-// LSPHover returns hover info at the given 1-based position.
-func (a *Application) LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error) {
-	if a.lspManager == nil {
-		return lsp.HoverResult{}, nil
-	}
-	return a.lspManager.Hover(ctx, line, column)
-}
-
-// LSPDefinition returns definition location at the given 1-based position.
-func (a *Application) LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error) {
-	if a.lspManager == nil {
-		return nil, nil
-	}
-	return a.lspManager.Definition(ctx, line, column)
-}
-
-// LSPSignatureHelp returns signature help at the given 1-based position.
-func (a *Application) LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error) {
-	if a.lspManager == nil {
-		return lsp.SignatureResult{}, nil
-	}
-	return a.lspManager.SignatureHelp(ctx, line, column)
+	return a.lspManager.WorkspaceInfo()
 }
 
 // LSPStatus returns current LSP readiness.
@@ -789,13 +754,6 @@ func (a *Application) LSPStatus(ctx context.Context) lsp.StatusResult {
 		return lsp.StatusResult{Ready: false, Error: "lsp not initialized"}
 	}
 	return a.lspManager.Status()
-}
-
-// SetLSPDiagnosticHandler registers the callback for gopls diagnostics.
-func (a *Application) SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler) {
-	if a.lspManager != nil {
-		a.lspManager.SetDiagnosticHandler(handler)
-	}
 }
 
 func (a *Application) projectRecordByPath(ctx context.Context, projectPath string) (storage.ProjectRecord, error) {
@@ -855,7 +813,7 @@ func defaultDataRoot() string {
 func generateRunID() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
-		return "run_" + hex.EncodeToString(b)
+		return "run_fallback"
 	}
 	return "run_" + hex.EncodeToString(b)
 }

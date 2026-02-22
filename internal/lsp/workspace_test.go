@@ -41,40 +41,6 @@ func TestWorkspaceCreate(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSyncSnippet(t *testing.T) {
-	t.Parallel()
-
-	projectDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module example.com/myapp\n\ngo 1.22\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ws, err := createWorkspace(projectDir)
-	if err != nil {
-		t.Fatalf("createWorkspace() error = %v", err)
-	}
-	defer ws.cleanup()
-
-	snippet := "package main\n\nfunc main() {}\n"
-	version := ws.syncSnippet(snippet)
-	if version != 1 {
-		t.Fatalf("version = %d, want 1", version)
-	}
-
-	content, err := os.ReadFile(ws.snippetFilePath())
-	if err != nil {
-		t.Fatalf("read snippet error = %v", err)
-	}
-	if string(content) != snippet {
-		t.Fatalf("snippet content = %q, want %q", content, snippet)
-	}
-
-	version2 := ws.syncSnippet("package main\n\nfunc main() { println(1) }\n")
-	if version2 != 2 {
-		t.Fatalf("version2 = %d, want 2", version2)
-	}
-}
-
 func TestWorkspaceSnippetURI(t *testing.T) {
 	t.Parallel()
 

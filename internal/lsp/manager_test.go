@@ -4,12 +4,16 @@ import (
 	"testing"
 )
 
-func TestFindGoplsBinaryNotFound(t *testing.T) {
+func TestFindGoplsBinaryReturnsPath(t *testing.T) {
 	t.Parallel()
 
-	path := findGoplsBinary("/nonexistent/path/only")
+	// findGoplsBinary returns empty string if gopls is not installed,
+	// or an absolute path if it is. Either result is valid in CI/local.
+	path := findGoplsBinary()
 	if path != "" {
-		t.Fatalf("findGoplsBinary() = %q, want empty for missing binary", path)
+		if path[0] != '/' {
+			t.Fatalf("findGoplsBinary() = %q, want absolute path or empty", path)
+		}
 	}
 }
 

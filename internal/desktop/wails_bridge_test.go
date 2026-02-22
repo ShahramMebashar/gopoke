@@ -50,18 +50,12 @@ type fakeApplication struct {
 	runStderrChunks     []string
 	canceledRunIDs      []string
 	cancelRunErr        error
-	startWorkerResp runner.Worker
-	startWorkerErr  error
-	stopWorkerErr   error
-	completionResp  []lsp.CompletionItem
-	completionErr   error
-	hoverResp       lsp.HoverResult
-	hoverErr        error
-	definitionResp  []lsp.Location
-	definitionErr   error
-	signatureResp   lsp.SignatureResult
-	signatureErr    error
-	lspStatus       lsp.StatusResult
+	startWorkerResp     runner.Worker
+	startWorkerErr      error
+	stopWorkerErr       error
+	lspStatus           lsp.StatusResult
+	lspWSPort           int
+	lspWorkspaceInfo    lsp.WorkspaceInfo
 }
 
 func (f *fakeApplication) Start(ctx context.Context) error {
@@ -172,36 +166,19 @@ func (f *fakeApplication) StopLSP(ctx context.Context) error {
 	return nil
 }
 
-func (f *fakeApplication) SyncSnippetToLSP(ctx context.Context, content string) error {
-	return nil
+func (f *fakeApplication) LSPWebSocketPort(ctx context.Context) int {
+	return f.lspWSPort
 }
 
-func (f *fakeApplication) OpenSnippetInLSP(ctx context.Context, content string) error {
-	return nil
-}
-
-func (f *fakeApplication) LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error) {
-	return f.completionResp, f.completionErr
-}
-
-func (f *fakeApplication) LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error) {
-	return f.hoverResp, f.hoverErr
-}
-
-func (f *fakeApplication) LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error) {
-	return f.definitionResp, f.definitionErr
-}
-
-func (f *fakeApplication) LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error) {
-	return f.signatureResp, f.signatureErr
+func (f *fakeApplication) LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInfo {
+	return f.lspWorkspaceInfo
 }
 
 func (f *fakeApplication) LSPStatus(ctx context.Context) lsp.StatusResult {
 	return f.lspStatus
 }
 
-func (f *fakeApplication) SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler) {}
-func (f *fakeApplication) ScratchDir() string                                    { return "" }
+func (f *fakeApplication) ScratchDir() string { return "" }
 
 func TestWailsBridgeRequiresStartup(t *testing.T) {
 	t.Parallel()
@@ -524,42 +501,20 @@ func TestWailsBridgeProjectWorkerLifecycle(t *testing.T) {
 	}
 }
 
-func TestWailsBridgeLSPCompletion(t *testing.T) {
+func TestWailsBridgeLSPWebSocketPort(t *testing.T) {
 	t.Parallel()
 
 	bridge := NewWailsBridge(&fakeApplication{
-		completionResp: []lsp.CompletionItem{
-			{Label: "Println", Detail: "func(a ...any)", Kind: "function", InsertText: "Println"},
-		},
+		lspWSPort: 8080,
 	})
 	bridge.Startup(context.Background())
 
-	items, err := bridge.Completion(5, 10)
+	port, err := bridge.LSPWebSocketPort()
 	if err != nil {
-		t.Fatalf("Completion() error = %v", err)
+		t.Fatalf("LSPWebSocketPort() error = %v", err)
 	}
-	if got, want := len(items), 1; got != want {
-		t.Fatalf("len(items) = %d, want %d", got, want)
-	}
-	if got, want := items[0].Label, "Println"; got != want {
-		t.Fatalf("items[0].Label = %q, want %q", got, want)
-	}
-}
-
-func TestWailsBridgeLSPHover(t *testing.T) {
-	t.Parallel()
-
-	bridge := NewWailsBridge(&fakeApplication{
-		hoverResp: lsp.HoverResult{Contents: "func Println(a ...any)"},
-	})
-	bridge.Startup(context.Background())
-
-	hover, err := bridge.Hover(5, 10)
-	if err != nil {
-		t.Fatalf("Hover() error = %v", err)
-	}
-	if got, want := hover.Contents, "func Println(a ...any)"; got != want {
-		t.Fatalf("hover.Contents = %q, want %q", got, want)
+	if got, want := port, 8080; got != want {
+		t.Fatalf("port = %d, want %d", got, want)
 	}
 }
 

@@ -6,14 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 type workspace struct {
 	dir         string
 	projectPath string
-	mu          sync.Mutex
-	version     int
 }
 
 func createWorkspace(projectPath string) (*workspace, error) {
@@ -45,27 +42,12 @@ func createWorkspace(projectPath string) (*workspace, error) {
 	}, nil
 }
 
-func (w *workspace) syncSnippet(content string) int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.version++
-	os.WriteFile(w.snippetFilePath(), []byte(content), 0o644)
-	return w.version
-}
-
 func (w *workspace) snippetFilePath() string {
 	return filepath.Join(w.dir, "main.go")
 }
 
 func (w *workspace) snippetURI() string {
 	return "file://" + w.snippetFilePath()
-}
-
-func (w *workspace) currentVersion() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.version
 }
 
 func (w *workspace) cleanup() {

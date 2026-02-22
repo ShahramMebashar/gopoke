@@ -66,14 +66,9 @@ type ApplicationService interface {
 	StopProjectWorker(ctx context.Context, projectPath string) error
 	StartLSP(ctx context.Context, projectPath string) error
 	StopLSP(ctx context.Context) error
-	SyncSnippetToLSP(ctx context.Context, content string) error
-	OpenSnippetInLSP(ctx context.Context, content string) error
-	LSPCompletion(ctx context.Context, line, column int) ([]lsp.CompletionItem, error)
-	LSPHover(ctx context.Context, line, column int) (lsp.HoverResult, error)
-	LSPDefinition(ctx context.Context, line, column int) ([]lsp.Location, error)
-	LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error)
+	LSPWebSocketPort(ctx context.Context) int
+	LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInfo
 	LSPStatus(ctx context.Context) lsp.StatusResult
-	SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler)
 	ScratchDir() string
 }
 
@@ -108,10 +103,6 @@ func (b *WailsBridge) Startup(ctx context.Context) {
 	b.started = true
 	b.startupErr = b.app.Start(ctx)
 	b.mu.Unlock()
-
-	b.app.SetLSPDiagnosticHandler(func(event lsp.DiagnosticEvent) {
-		b.emitEvent(ctx, lspDiagnosticsEventName, event)
-	})
 
 	// Start LSP against scratch workspace for immediate completions
 	go func() {
@@ -168,10 +159,11 @@ func (b *WailsBridge) OpenProject(path string) (project.OpenProjectResult, error
 		return project.OpenProjectResult{}, fmt.Errorf("open project: %w", err)
 	}
 
-	// Start LSP in background — non-blocking, errors logged not returned
+	// Start LSP in background — non-blocking, errors logged not returned.
+	// Use context.Background() because ctx is tied to the Wails request
+	// lifetime, which ends before gopls finishes starting.
 	go func() {
-		if lspErr := b.app.StartLSP(ctx, path); lspErr != nil {
-			// LSP is optional; log but don't fail project open
+		if lspErr := b.app.StartLSP(context.Background(), path); lspErr != nil {
 			fmt.Printf("gopls start: %v\n", lspErr)
 		}
 	}()
@@ -442,67 +434,22 @@ func (b *WailsBridge) ChooseProjectDirectory() (string, error) {
 	return path, nil
 }
 
-const lspDiagnosticsEventName = "gopad:lsp:diagnostics"
-
-// Completion returns LSP completions at the given position.
-func (b *WailsBridge) Completion(line int, column int) ([]lsp.CompletionItem, error) {
+// LSPWebSocketPort returns the WebSocket proxy port for monaco-languageclient.
+func (b *WailsBridge) LSPWebSocketPort() (int, error) {
 	ctx, err := b.requestContext()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	items, err := b.app.LSPCompletion(ctx, line, column)
-	if err != nil {
-		return nil, fmt.Errorf("lsp completion: %w", err)
-	}
-	return items, nil
+	return b.app.LSPWebSocketPort(ctx), nil
 }
 
-// Hover returns LSP hover info at the given position.
-func (b *WailsBridge) Hover(line int, column int) (lsp.HoverResult, error) {
+// LSPWorkspaceInfo returns workspace details for the frontend LSP client.
+func (b *WailsBridge) LSPWorkspaceInfo() (lsp.WorkspaceInfo, error) {
 	ctx, err := b.requestContext()
 	if err != nil {
-		return lsp.HoverResult{}, err
+		return lsp.WorkspaceInfo{}, err
 	}
-	result, err := b.app.LSPHover(ctx, line, column)
-	if err != nil {
-		return lsp.HoverResult{}, fmt.Errorf("lsp hover: %w", err)
-	}
-	return result, nil
-}
-
-// Definition returns LSP definition location at the given position.
-func (b *WailsBridge) Definition(line int, column int) ([]lsp.Location, error) {
-	ctx, err := b.requestContext()
-	if err != nil {
-		return nil, err
-	}
-	locations, err := b.app.LSPDefinition(ctx, line, column)
-	if err != nil {
-		return nil, fmt.Errorf("lsp definition: %w", err)
-	}
-	return locations, nil
-}
-
-// SignatureHelp returns LSP signature help at the given position.
-func (b *WailsBridge) SignatureHelp(line int, column int) (lsp.SignatureResult, error) {
-	ctx, err := b.requestContext()
-	if err != nil {
-		return lsp.SignatureResult{}, err
-	}
-	result, err := b.app.LSPSignatureHelp(ctx, line, column)
-	if err != nil {
-		return lsp.SignatureResult{}, fmt.Errorf("lsp signature help: %w", err)
-	}
-	return result, nil
-}
-
-// SyncSnippet sends updated snippet content to gopls.
-func (b *WailsBridge) SyncSnippet(content string) error {
-	ctx, err := b.requestContext()
-	if err != nil {
-		return err
-	}
-	return b.app.SyncSnippetToLSP(ctx, content)
+	return b.app.LSPWorkspaceInfo(ctx), nil
 }
 
 // LSPStatus returns LSP readiness status.

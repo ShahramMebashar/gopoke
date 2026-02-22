@@ -1,23 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { go } from "@codemirror/lang-go";
-import { oneDark } from "@codemirror/theme-one-dark";
-import * as themes from "@uiw/codemirror-themes-all";
-import { autocompletion } from "@codemirror/autocomplete";
-import { linter, lintGutter } from "@codemirror/lint";
-import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
+import GopadMonacoEditor from "./MonacoEditor";
 import {
   availableToolchains,
   cancelRun,
   chooseProjectDirectory,
-  completion,
-  definition,
   deleteProjectEnvVar,
   deleteProjectSnippet,
   formatSnippet,
-  hover,
   lspStatus,
-  onLspDiagnostics,
+  lspWebSocketPort,
+  lspWorkspaceInfo,
   onRunStderrChunk,
   onRunStdoutChunk,
   openProject,
@@ -29,12 +21,18 @@ import {
   setProjectDefaultPackage,
   setProjectToolchain,
   setProjectWorkingDirectory,
-  syncSnippet,
   upsertProjectEnvVar,
 } from "./wailsBridge";
 
+const monacoThemes = [
+  "Default Dark Modern",
+  "Default Light Modern",
+  "Default High Contrast",
+  "Default High Contrast Light",
+];
+
 const defaultEditorSettings = {
-  theme: "oneDark",
+  theme: "Default Dark Modern",
   fontFamily: "JetBrains Mono",
   fontSize: 14,
   lineNumbers: true,
@@ -51,21 +49,6 @@ function loadEditorSettings() {
 function saveEditorSettings(settings) {
   localStorage.setItem("gopad:editor-settings", JSON.stringify(settings));
 }
-
-const themeMap = {
-  oneDark: oneDark,
-  dracula: themes.dracula,
-  githubDark: themes.githubDark,
-  githubLight: themes.githubLight,
-  solarizedDark: themes.solarizedDark,
-  solarizedLight: themes.solarizedLight,
-  tokyoNight: themes.tokyoNight,
-  vscodeDark: themes.vscodeDark,
-  nord: themes.nord,
-  monokai: themes.monokai,
-};
-
-const themeNames = Object.keys(themeMap);
 
 const defaultSnippet = [
   "package main",
@@ -367,87 +350,6 @@ function readOpenWarnings(result) {
   return Array.isArray(result?.EnvLoadWarnings) ? result.EnvLoadWarnings : [];
 }
 
-function lspCompletionSource(context) {
-  const line = context.state.doc.lineAt(context.pos);
-  const lineNumber = line.number;
-  const column = context.pos - line.from + 1;
-
-  return completion(lineNumber, column)
-    .then((items) => {
-      if (!items || items.length === 0) return null;
-
-      // Use the first item's textEdit range for the result-level 'from'
-      // so CodeMirror can filter completions against the typed prefix.
-      let from = context.pos;
-      const firstEdit = items[0]?.textEdit;
-      if (firstEdit?.range) {
-        const startLine = context.state.doc.line(firstEdit.range.start.line + 1);
-        from = startLine.from + firstEdit.range.start.character;
-      }
-
-      return {
-        from,
-        options: items.map((item) => {
-          const label = item.label || item.Label || "";
-          const textEdit = item.textEdit;
-          const additionalEdits = item.additionalTextEdits;
-          const insertText = textEdit?.newText || item.insertText || item.InsertText || label;
-
-          const option = {
-            label,
-            detail: item.detail || item.Detail || "",
-            type: item.kind || item.Kind || "text",
-            boost: item.sortText ? -parseInt(item.sortText, 10) || 0 : 0,
-          };
-
-          if (additionalEdits && additionalEdits.length > 0) {
-            // Use apply function to batch primary edit with auto-imports
-            option.apply = (view, _completion, from, to) => {
-              const changes = [{ from, to, insert: insertText }];
-              for (const edit of additionalEdits) {
-                const editLine = view.state.doc.line(edit.range.start.line + 1);
-                const editFrom = editLine.from + edit.range.start.character;
-                const editEndLine = view.state.doc.line(edit.range.end.line + 1);
-                const editTo = editEndLine.from + edit.range.end.character;
-                changes.push({ from: editFrom, to: editTo, insert: edit.newText });
-              }
-              view.dispatch({ changes });
-            };
-          } else {
-            option.apply = insertText;
-          }
-
-          return option;
-        }),
-      };
-    })
-    .catch(() => null);
-}
-
-function lspHoverTooltip(view, pos) {
-  const line = view.state.doc.lineAt(pos);
-  const lineNumber = line.number;
-  const column = pos - line.from + 1;
-
-  return hover(lineNumber, column)
-    .then((result) => {
-      const contents = result?.contents || result?.Contents || "";
-      if (!contents) return null;
-      return {
-        pos,
-        above: true,
-        create() {
-          const dom = document.createElement("div");
-          dom.className = "cm-lsp-hover";
-          dom.style.cssText = "max-width:500px;padding:6px 10px;font-size:12px;white-space:pre-wrap;font-family:monospace;";
-          dom.textContent = contents;
-          return { dom };
-        },
-      };
-    })
-    .catch(() => null);
-}
-
 export default function App() {
   const [status, setStatus] = useState({ kind: "info", message: "Ready." });
   const [isBusy, setIsBusy] = useState(false);
@@ -493,8 +395,12 @@ export default function App() {
     });
   }, []);
 
+  // LSP connection state
+  const [lspPort, setLspPort] = useState(0);
+  const [lspWorkspaceDir, setLspWorkspaceDir] = useState("");
+
   const activeRunIdRef = useRef("");
-  const editorViewRef = useRef(null);
+  const runHandlerRef = useRef(null);
 
   const lineCount = useMemo(
     () => (snippet.length === 0 ? 0 : snippet.split("\n").length),
@@ -642,33 +548,18 @@ export default function App() {
     return () => cancel();
   }, []);
 
-  // Debounced snippet sync to LSP
-  const syncTimerRef = useRef(null);
-  useEffect(() => {
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(() => {
-      syncSnippet(snippet).catch(() => {});
-    }, 300);
-    return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    };
-  }, [snippet]);
 
-  // LSP diagnostics listener
-  const [lspDiagnostics, setLspDiagnostics] = useState([]);
-  useEffect(() => {
-    const cancel = onLspDiagnostics((payload) => {
-      const diags = payload?.diagnostics || payload?.Diagnostics || [];
-      setLspDiagnostics(diags);
-    });
-    return () => cancel();
-  }, []);
-
-  // Keyboard shortcuts: Cmd+B toggle sidebar, Cmd+1-4 open tabs
+  // Keyboard shortcuts: Cmd+B toggle sidebar, Cmd+Enter run, Cmd+1-4 open tabs
   useEffect(() => {
     const handleKeyDown = (event) => {
       const isMod = event.metaKey || event.ctrlKey;
       if (!isMod) return;
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runHandlerRef.current?.();
+        return;
+      }
 
       if (event.key === "b" || event.key === "B") {
         event.preventDefault();
@@ -733,6 +624,14 @@ export default function App() {
           refreshProjectSnippets(result?.Project?.Path || trimmed),
           refreshToolchains(result?.Project?.Toolchain || ""),
         ]);
+
+        // Fetch LSP connection info (LSP started by openProject)
+        try {
+          const port = await lspWebSocketPort();
+          const wsInfo = await lspWorkspaceInfo();
+          setLspPort(port || 0);
+          setLspWorkspaceDir(wsInfo?.dir || "");
+        } catch {}
 
         const warnings = readOpenWarnings(result);
         if (warnings.length > 0) {
@@ -1153,6 +1052,9 @@ export default function App() {
     await executeRun(snippetRef.current);
   }, [executeRun]);
 
+  // Keep ref updated for keyboard handler
+  runHandlerRef.current = handleRunSnippet;
+
   const handleRerunLast = useCallback(async () => {
     if (!lastRunSource) {
       setStatus({ kind: "info", message: "No previous snippet run yet." });
@@ -1176,136 +1078,16 @@ export default function App() {
   }, []);
 
   const handleJumpToDiagnostic = useCallback((diagnostic) => {
-    const view = editorViewRef.current;
-    if (!view) {
-      setStatus({ kind: "error", message: "Editor view is unavailable for navigation." });
-      return;
-    }
     if (!diagnostic || diagnostic.line <= 0) {
       setStatus({ kind: "error", message: "Diagnostic line mapping is invalid." });
       return;
     }
-
-    const totalLines = view.state.doc.lines;
-    if (diagnostic.line > totalLines) {
-      setStatus({
-        kind: "error",
-        message: `Diagnostic line ${diagnostic.line} is outside editor range (${totalLines} lines).`,
-      });
-      return;
-    }
-
-    const line = view.state.doc.line(diagnostic.line);
-    const column = diagnostic.column > 0 ? diagnostic.column : 1;
-    const target = Math.min(line.from + column - 1, line.to);
-    view.dispatch({
-      selection: { anchor: target },
-      scrollIntoView: true,
-    });
-    view.focus();
     setStatus({
       kind: "info",
-      message: `Jumped to line ${diagnostic.line}${diagnostic.column > 0 ? `:${diagnostic.column}` : ""}.`,
+      message: `Diagnostic at line ${diagnostic.line}${diagnostic.column > 0 ? `:${diagnostic.column}` : ""}: ${diagnostic.message}`,
     });
   }, []);
 
-  const lintExtension = useMemo(() => {
-    return linter((view) => {
-      return lspDiagnostics
-        .map((d) => {
-          const line = d.line || d.Line || 1;
-          const col = d.column || d.Column || 1;
-          const endLine = d.endLine || d.EndLine || line;
-          const endCol = d.endColumn || d.EndColumn || col;
-          const severity = d.severity || d.Severity || "error";
-
-          if (line < 1 || line > view.state.doc.lines) return null;
-          const fromLine = view.state.doc.line(line);
-          const from = Math.min(fromLine.from + col - 1, fromLine.to);
-
-          let to = from;
-          if (endLine >= 1 && endLine <= view.state.doc.lines) {
-            const toLine = view.state.doc.line(endLine);
-            to = Math.min(toLine.from + endCol - 1, toLine.to);
-          }
-          if (to <= from) to = Math.min(from + 1, fromLine.to);
-
-          return {
-            from,
-            to,
-            severity: severity === "error" ? "error" : severity === "warning" ? "warning" : "info",
-            message: d.message || d.Message || "Unknown diagnostic",
-          };
-        })
-        .filter(Boolean);
-    }, { delay: 0 });
-  }, [lspDiagnostics]);
-
-  const fontTheme = useMemo(
-    () =>
-      EditorView.theme({
-        "&": {
-          fontFamily: editorSettings.fontFamily,
-          fontSize: editorSettings.fontSize + "px",
-        },
-        ".cm-gutters": {
-          fontFamily: editorSettings.fontFamily,
-          fontSize: editorSettings.fontSize + "px",
-        },
-      }),
-    [editorSettings.fontFamily, editorSettings.fontSize],
-  );
-
-  const editorExtensions = useMemo(
-    () => [
-      go(),
-      autocompletion({
-        override: [lspCompletionSource],
-        activateOnTyping: true,
-      }),
-      hoverTooltip(lspHoverTooltip, { hideOnChange: true }),
-      lintGutter(),
-      keymap.of([
-        {
-          key: "Mod-Enter",
-          run: () => {
-            void handleRunSnippet();
-            return true;
-          },
-        },
-        {
-          key: "F12",
-          run: (view) => {
-            const pos = view.state.selection.main.head;
-            const line = view.state.doc.lineAt(pos);
-            const lineNumber = line.number;
-            const column = pos - line.from + 1;
-            definition(lineNumber, column)
-              .then((locations) => {
-                if (!locations || locations.length === 0) return;
-                const loc = locations[0];
-                if (loc.uri && loc.uri.endsWith("/main.go")) {
-                  const targetLine = (loc.range?.start?.line || 0) + 1;
-                  const targetCol = (loc.range?.start?.character || 0);
-                  if (targetLine > 0 && targetLine <= view.state.doc.lines) {
-                    const lineInfo = view.state.doc.line(targetLine);
-                    const target = Math.min(lineInfo.from + targetCol, lineInfo.to);
-                    view.dispatch({
-                      selection: { anchor: target },
-                      scrollIntoView: true,
-                    });
-                    view.focus();
-                  }
-                }
-              })
-              .catch(() => {});
-            return true;
-          },
-        },
-      ]),
-    ],
-    [handleRunSnippet],
-  );
   // ── Native toolbar JS bridge ─────────────────────────────────────────────
   const toolbarHandlers = useRef({});
   toolbarHandlers.current = {
@@ -1706,26 +1488,20 @@ export default function App() {
         )}
 
         <div className="editor-pane">
-          <CodeMirror
-            value={snippet}
-            height="100%"
-            extensions={[...editorExtensions, lintExtension, fontTheme]}
-            theme={themeMap[editorSettings.theme] || oneDark}
-            onChange={(value) => setSnippet(value)}
-            onCreateEditor={(view) => {
-              editorViewRef.current = view;
-            }}
-            basicSetup={{
-              lineNumbers: editorSettings.lineNumbers,
-              highlightActiveLine: true,
-              autocompletion: false,
-            }}
+          <GopadMonacoEditor
+            code={snippet}
+            onCodeChange={setSnippet}
+            wsPort={lspPort}
+            workspaceDir={lspWorkspaceDir}
+            theme={editorSettings.theme}
+            fontSize={editorSettings.fontSize}
+            fontFamily={editorSettings.fontFamily}
+            lineNumbers={editorSettings.lineNumbers ? "on" : "off"}
           />
           <div className="editor-status">
             <span>{lineCount} lines</span>
             <span>{snippet.length} chars</span>
             {selectedSnippetId && <span>{snippetNameInput}</span>}
-            <span className="status-lsp">{lspDiagnostics.length > 0 ? `${lspDiagnostics.length} LSP issues` : ""}</span>
             <span className="status-spacer" />
             <span className={`status-run-state ${runState}`}>{runStateLabel(runState)}</span>
             {runResult && runResult.DurationMS != null && (
@@ -1806,7 +1582,7 @@ export default function App() {
             <div className="settings-section">
               <h3>Theme</h3>
               <div className="theme-grid">
-                {themeNames.map((name) => (
+                {monacoThemes.map((name) => (
                   <button
                     key={name}
                     type="button"
