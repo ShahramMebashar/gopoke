@@ -201,6 +201,7 @@ func (f *fakeApplication) LSPStatus(ctx context.Context) lsp.StatusResult {
 }
 
 func (f *fakeApplication) SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler) {}
+func (f *fakeApplication) ScratchDir() string                                    { return "" }
 
 func TestWailsBridgeRequiresStartup(t *testing.T) {
 	t.Parallel()

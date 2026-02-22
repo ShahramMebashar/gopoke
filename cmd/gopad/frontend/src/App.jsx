@@ -1092,14 +1092,6 @@ export default function App() {
 
   const executeRun = useCallback(
     async (sourceToRun) => {
-      if (!activeProjectResult || !activeProjectResult.Project.Path) {
-        setStatus({
-          kind: "error",
-          message: "Open a project before running a snippet.",
-        });
-        return;
-      }
-
       setIsBusy(true);
       setStatus({ kind: "info", message: "Running snippet..." });
       setRunState("running");
@@ -1109,11 +1101,13 @@ export default function App() {
         setActiveRunId(runId);
         setRunResult(emptyRunResult());
         setLastRunSource(sourceToRun);
-        const packagePath =
-          selectedTarget || activeProjectResult.Project.DefaultPkg || "";
+        const projectPath = activeProjectResult?.Project?.Path || "";
+        const packagePath = projectPath
+          ? selectedTarget || activeProjectResult.Project.DefaultPkg || ""
+          : "";
         const result = await runSnippet({
           runId,
-          projectPath: activeProjectResult.Project.Path,
+          projectPath,
           packagePath,
           source: sourceToRun,
         });

@@ -74,6 +74,7 @@ type ApplicationService interface {
 	LSPSignatureHelp(ctx context.Context, line, column int) (lsp.SignatureResult, error)
 	LSPStatus(ctx context.Context) lsp.StatusResult
 	SetLSPDiagnosticHandler(handler lsp.DiagnosticHandler)
+	ScratchDir() string
 }
 
 // WailsBridge exposes backend methods to the Wails frontend.
@@ -111,6 +112,16 @@ func (b *WailsBridge) Startup(ctx context.Context) {
 	b.app.SetLSPDiagnosticHandler(func(event lsp.DiagnosticEvent) {
 		b.emitEvent(ctx, lspDiagnosticsEventName, event)
 	})
+
+	// Start LSP against scratch workspace for immediate completions
+	go func() {
+		scratchDir := b.app.ScratchDir()
+		if scratchDir != "" {
+			if lspErr := b.app.StartLSP(ctx, scratchDir); lspErr != nil {
+				fmt.Printf("scratch gopls start: %v\n", lspErr)
+			}
+		}
+	}()
 }
 
 // Shutdown is called by Wails at app shutdown.

@@ -44,6 +44,7 @@ type Application struct {
 	activeRuns     map[string]context.CancelFunc
 	telemetry      *telemetry.Recorder
 	startupMetrics telemetry.StartupEvent
+	scratchDir     string // temp dir for projectless runs and LSP
 }
 
 type resolvedRunRequest struct {
@@ -80,6 +81,17 @@ func (a *Application) Start(ctx context.Context) error {
 		return fmt.Errorf("bootstrap storage: %w", err)
 	}
 
+	// Create scratch workspace for projectless mode
+	scratchDir := filepath.Join(os.TempDir(), fmt.Sprintf("gopad-scratch-%d", os.Getpid()))
+	if err := os.MkdirAll(scratchDir, 0o700); err != nil {
+		return fmt.Errorf("create scratch workspace: %w", err)
+	}
+	goModContent := "module gopad-scratch\n\ngo 1.22\n"
+	if err := os.WriteFile(filepath.Join(scratchDir, "go.mod"), []byte(goModContent), 0o644); err != nil {
+		return fmt.Errorf("write scratch go.mod: %w", err)
+	}
+	a.scratchDir = scratchDir
+
 	a.projects = project.NewService(a.store)
 	a.workers = runner.NewManager()
 	a.lspManager = lsp.NewManager()
@@ -95,6 +107,9 @@ func (a *Application) Start(ctx context.Context) error {
 
 // Stop shuts down workers and LSP, then releases resources.
 func (a *Application) Stop(ctx context.Context) error {
+	if a.scratchDir != "" {
+		os.RemoveAll(a.scratchDir)
+	}
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("shutdown context: %w", err)
 	}
@@ -107,6 +122,11 @@ func (a *Application) Stop(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// ScratchDir returns the path to the scratch workspace for projectless mode.
+func (a *Application) ScratchDir() string {
+	return a.scratchDir
 }
 
 // Health checks whether local storage is initialized.
@@ -455,9 +475,6 @@ func (a *Application) resolveRunRequest(ctx context.Context, request execution.R
 	if a.store == nil {
 		return resolvedRunRequest{}, fmt.Errorf("storage service not initialized")
 	}
-	if strings.TrimSpace(request.ProjectPath) == "" {
-		return resolvedRunRequest{}, fmt.Errorf("project path is required")
-	}
 	if strings.TrimSpace(request.Source) == "" {
 		return resolvedRunRequest{}, fmt.Errorf("snippet is required")
 	}
@@ -465,7 +482,24 @@ func (a *Application) resolveRunRequest(ctx context.Context, request execution.R
 	if request.TimeoutMS > 0 {
 		timeout = time.Duration(request.TimeoutMS) * time.Millisecond
 	}
-
+	// Projectless mode: use scratch workspace
+	if strings.TrimSpace(request.ProjectPath) == "" {
+		if a.scratchDir == "" {
+			return resolvedRunRequest{}, fmt.Errorf("scratch workspace not initialized")
+		}
+		resolvedToolchain, err := project.ResolveToolchainBinary("go")
+		if err != nil {
+			return resolvedRunRequest{}, fmt.Errorf("resolve default toolchain: %w", err)
+		}
+		return resolvedRunRequest{
+			projectPath:      a.scratchDir,
+			source:           request.Source,
+			workingDirectory: a.scratchDir,
+			toolchain:        resolvedToolchain,
+			environment:      make(map[string]string),
+			timeout:          timeout,
+		}, nil
+	}
 	absoluteProjectPath, err := resolveInputPath(request.ProjectPath)
 	if err != nil {
 		return resolvedRunRequest{}, err
