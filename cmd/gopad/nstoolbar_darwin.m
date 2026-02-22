@@ -12,6 +12,7 @@ static NSToolbarItemIdentifier const GoPadNewItemID       = @"com.gopad.new";
 static NSToolbarItemIdentifier const GoPadFormatItemID    = @"com.gopad.format";
 static NSToolbarItemIdentifier const GoPadRunItemID       = @"com.gopad.run";
 static NSToolbarItemIdentifier const GoPadRerunItemID     = @"com.gopad.rerun";
+static NSToolbarItemIdentifier const GoPadSettingsItemID  = @"com.gopad.settings";
 
 // Tags for identification when updating state.
 enum {
@@ -20,7 +21,8 @@ enum {
     GoPadTagNew     = 3,
     GoPadTagFormat  = 4,
     GoPadTagRun     = 5,
-    GoPadTagRerun   = 6,
+    GoPadTagRerun    = 6,
+    GoPadTagSettings = 7,
 };
 
 // ── WKWebView finder ────────────────────────────────────────────────────────
@@ -51,7 +53,8 @@ static WKWebView *FindWKWebView(NSView *root) {
         case GoPadTagNew:     action = @"newSnippet";     break;
         case GoPadTagFormat:  action = @"format";         break;
         case GoPadTagRun:     action = @"run";            break;
-        case GoPadTagRerun:   action = @"rerun";          break;
+        case GoPadTagRerun:    action = @"rerun";          break;
+        case GoPadTagSettings: action = @"settings";       break;
         default: return;
     }
 
@@ -116,6 +119,13 @@ static WKWebView *FindWKWebView(NSView *root) {
             item.image = [NSImage imageWithSystemSymbolName:@"arrow.clockwise"
                                   accessibilityDescription:@"Re-run Last"];
         }
+    } else if ([itemIdentifier isEqualToString:GoPadSettingsItemID]) {
+        item.label = @"Settings";
+        item.tag = GoPadTagSettings;
+        if (@available(macOS 11.0, *)) {
+            item.image = [NSImage imageWithSystemSymbolName:@"gearshape"
+                                  accessibilityDescription:@"Editor Settings"];
+        }
     }
 
     return item;
@@ -129,6 +139,7 @@ static WKWebView *FindWKWebView(NSView *root) {
         GoPadFormatItemID,
         GoPadRunItemID,
         GoPadRerunItemID,
+        GoPadSettingsItemID,
         NSToolbarFlexibleSpaceItemIdentifier,
     ];
 }
@@ -142,6 +153,7 @@ static WKWebView *FindWKWebView(NSView *root) {
         GoPadRunItemID,
         NSToolbarFlexibleSpaceItemIdentifier,
         GoPadRerunItemID,
+        GoPadSettingsItemID,
     ];
 }
 

@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { go } from "@codemirror/lang-go";
 import { oneDark } from "@codemirror/theme-one-dark";
+import * as themes from "@uiw/codemirror-themes-all";
 import { autocompletion } from "@codemirror/autocomplete";
 import { linter, lintGutter } from "@codemirror/lint";
-import { hoverTooltip, keymap } from "@codemirror/view";
+import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import {
   availableToolchains,
   cancelRun,
@@ -31,6 +32,40 @@ import {
   syncSnippet,
   upsertProjectEnvVar,
 } from "./wailsBridge";
+
+const defaultEditorSettings = {
+  theme: "oneDark",
+  fontFamily: "JetBrains Mono",
+  fontSize: 14,
+  lineNumbers: true,
+};
+
+function loadEditorSettings() {
+  try {
+    const raw = localStorage.getItem("gopad:editor-settings");
+    if (raw) return { ...defaultEditorSettings, ...JSON.parse(raw) };
+  } catch {}
+  return defaultEditorSettings;
+}
+
+function saveEditorSettings(settings) {
+  localStorage.setItem("gopad:editor-settings", JSON.stringify(settings));
+}
+
+const themeMap = {
+  oneDark: oneDark,
+  dracula: themes.dracula,
+  githubDark: themes.githubDark,
+  githubLight: themes.githubLight,
+  solarizedDark: themes.solarizedDark,
+  solarizedLight: themes.solarizedLight,
+  tokyoNight: themes.tokyoNight,
+  vscodeDark: themes.vscodeDark,
+  nord: themes.nord,
+  monokai: themes.monokai,
+};
+
+const themeNames = Object.keys(themeMap);
 
 const defaultSnippet = [
   "package main",
@@ -411,6 +446,18 @@ export default function App() {
   const [selectedSnippetId, setSelectedSnippetId] = useState("");
   const [snippetNameInput, setSnippetNameInput] = useState("");
 
+  // Editor appearance settings
+  const [editorSettings, setEditorSettings] = useState(loadEditorSettings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const updateEditorSetting = useCallback((key, value) => {
+    setEditorSettings((prev) => {
+      const next = { ...prev, [key]: value };
+      saveEditorSettings(next);
+      return next;
+    });
+  }, []);
+
   const activeRunIdRef = useRef("");
   const editorViewRef = useRef(null);
 
@@ -591,6 +638,12 @@ export default function App() {
       if (event.key === "b" || event.key === "B") {
         event.preventDefault();
         setSidebarOpen((open) => !open);
+        return;
+      }
+
+      if (event.key === ",") {
+        event.preventDefault();
+        setSettingsOpen((v) => !v);
         return;
       }
 
@@ -1159,6 +1212,21 @@ export default function App() {
     }, { delay: 0 });
   }, [lspDiagnostics]);
 
+  const fontTheme = useMemo(
+    () =>
+      EditorView.theme({
+        "&": {
+          fontFamily: editorSettings.fontFamily,
+          fontSize: editorSettings.fontSize + "px",
+        },
+        ".cm-gutters": {
+          fontFamily: editorSettings.fontFamily,
+          fontSize: editorSettings.fontSize + "px",
+        },
+      }),
+    [editorSettings.fontFamily, editorSettings.fontSize],
+  );
+
   const editorExtensions = useMemo(
     () => [
       go(),
@@ -1221,6 +1289,7 @@ export default function App() {
         ? void handleCancelRun()
         : void handleRunSnippet(),
     rerun: () => void handleRerunLast(),
+    settings: () => setSettingsOpen((v) => !v),
   };
 
   useEffect(() => {
@@ -1611,14 +1680,14 @@ export default function App() {
           <CodeMirror
             value={snippet}
             height="100%"
-            extensions={[...editorExtensions, lintExtension]}
-            theme={oneDark}
+            extensions={[...editorExtensions, lintExtension, fontTheme]}
+            theme={themeMap[editorSettings.theme] || oneDark}
             onChange={(value) => setSnippet(value)}
             onCreateEditor={(view) => {
               editorViewRef.current = view;
             }}
             basicSetup={{
-              lineNumbers: true,
+              lineNumbers: editorSettings.lineNumbers,
               highlightActiveLine: true,
               autocompletion: false,
             }}
@@ -1684,6 +1753,100 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="settings-modal"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSettingsOpen(false);
+            }}
+          >
+            <div className="settings-header">
+              <h2>Editor Settings</h2>
+              <button
+                type="button"
+                className="settings-close secondary"
+                onClick={() => setSettingsOpen(false)}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="settings-section">
+              <h3>Theme</h3>
+              <div className="theme-grid">
+                {themeNames.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className={`theme-btn secondary ${editorSettings.theme === name ? "active" : ""}`}
+                    onClick={() => updateEditorSetting("theme", name)}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <h3>Font Family</h3>
+              <select
+                value={editorSettings.fontFamily}
+                onChange={(e) => updateEditorSetting("fontFamily", e.target.value)}
+              >
+                {["JetBrains Mono", "SF Mono", "Menlo", "Fira Code", "Source Code Pro", "Cascadia Code"].map(
+                  (font) => (
+                    <option key={font} value={font}>
+                      {font}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            <div className="settings-section">
+              <h3>Font Size</h3>
+              <div className="settings-stepper">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    updateEditorSetting("fontSize", Math.max(10, editorSettings.fontSize - 1))
+                  }
+                  disabled={editorSettings.fontSize <= 10}
+                >
+                  &minus;
+                </button>
+                <span className="stepper-value">{editorSettings.fontSize}px</span>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    updateEditorSetting("fontSize", Math.min(24, editorSettings.fontSize + 1))
+                  }
+                  disabled={editorSettings.fontSize >= 24}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <h3>Line Numbers</h3>
+              <label className="settings-toggle">
+                <input
+                  type="checkbox"
+                  checked={editorSettings.lineNumbers}
+                  onChange={(e) => updateEditorSetting("lineNumbers", e.target.checked)}
+                />
+                <span>{editorSettings.lineNumbers ? "Visible" : "Hidden"}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

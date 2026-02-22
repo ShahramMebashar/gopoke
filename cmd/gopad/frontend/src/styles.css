@@ -631,6 +631,118 @@ button:disabled {
   font-size: 12px;
 }
 
+/* ── Settings Modal ────────────────────────── */
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.settings-modal {
+  width: 90%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: #0c1a28;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-header h2 {
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-main);
+}
+
+.settings-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-section h3 {
+  margin-bottom: 2px;
+}
+
+.theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.theme-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: border-color 100ms ease, background 100ms ease;
+}
+
+.theme-btn.active {
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--accent);
+}
+
+.settings-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stepper-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  min-width: 42px;
+  text-align: center;
+  color: var(--text-main);
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-toggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
 /* ── Responsive ────────────────────────────── */
 
 @media (max-width: 900px) {
