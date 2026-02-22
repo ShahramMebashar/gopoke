@@ -5,10 +5,9 @@ import { configureDefaultWorkerFactory } from "monaco-languageclient/workerFacto
 import { updateUserConfiguration } from "@codingame/monaco-vscode-configuration-service-override";
 
 // Side-effect imports: register VS Code theme + Go language extensions
-import "@codingame/monaco-vscode-go-default-extension";
+import { whenReady as goExtensionReady } from "@codingame/monaco-vscode-go-default-extension";
 import { allThemesReady } from "./themes.js";
 
-// Full config including theme — used after services + themes are ready
 function buildConfigJson(theme, fontSize, fontFamily, lineNumbers) {
   return JSON.stringify({
     "workbench.colorTheme": theme,
@@ -21,18 +20,7 @@ function buildConfigJson(theme, fontSize, fontFamily, lineNumbers) {
   });
 }
 
-// Bootstrap config WITHOUT theme — theme is applied later via updateUserConfiguration
-// so the config service detects a genuine file change when we add the theme key.
-function buildBootstrapConfigJson(fontSize, fontFamily, lineNumbers) {
-  return JSON.stringify({
-    "editor.fontSize": fontSize,
-    "editor.fontFamily": fontFamily,
-    "editor.lineNumbers": lineNumbers,
-    "editor.minimap.enabled": false,
-    "editor.wordBasedSuggestions": "off",
-    "editor.lightbulb.enabled": "On",
-  });
-}
+const allExtensionsReady = Promise.allSettled([allThemesReady, goExtensionReady()]);
 
 export default function GopadMonacoEditor({
   code,
@@ -45,39 +33,130 @@ export default function GopadMonacoEditor({
   lineNumbers = "on",
   onEditorReady,
 }) {
+  const [extensionsReady, setExtensionsReady] = useState(false);
   const [editorReady, setEditorReady] = useState(false);
-  const [themesReady, setThemesReady] = useState(false);
+  const editorAppRef = useRef(null);
+  const startupNudgeDoneRef = useRef(false);
 
-  // Track when all theme JSONs have been fetched
   useEffect(() => {
     let cancelled = false;
-    allThemesReady.then(() => { if (!cancelled) setThemesReady(true); });
-    return () => { cancelled = true; };
+    allExtensionsReady
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === "rejected") {
+            console.error("Monaco extension readiness failed", result.reason);
+          }
+        }
+        if (!cancelled) {
+          setExtensionsReady(true);
+        }
+      })
+      .catch((error) => {
+        console.error("Monaco extension readiness failed", error);
+        if (!cancelled) {
+          setExtensionsReady(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // One-time bootstrap config — consumed once by apiWrapper.start()
+  const refreshEditorPresentation = useCallback(() => {
+    const editor = editorAppRef.current?.getEditor?.();
+    const model = editor?.getModel?.();
+    if (!editor || !model) return;
+
+    try {
+      if (typeof model.resetTokenization === "function") {
+        model.resetTokenization();
+      }
+    } catch (error) {
+      console.error("Monaco resetTokenization failed", error);
+    }
+
+    try {
+      if (typeof model.forceTokenization === "function") {
+        const lines =
+          typeof model.getLineCount === "function" ? model.getLineCount() : 1;
+        model.forceTokenization(lines);
+      }
+    } catch (error) {
+      console.error("Monaco forceTokenization failed", error);
+    }
+
+    try {
+      const languageId =
+        typeof model.getLanguageId === "function" ? model.getLanguageId() : "";
+      if (typeof model.setLanguage === "function" && languageId) {
+        model.setLanguage("plaintext");
+        model.setLanguage(languageId);
+      }
+    } catch (error) {
+      console.error("Monaco language toggle failed", error);
+    }
+
+    try {
+      if (typeof editor.render === "function") {
+        editor.render(true);
+      }
+      if (typeof editor.layout === "function") {
+        editor.layout();
+      }
+    } catch (error) {
+      console.error("Monaco repaint failed", error);
+    }
+
+    if (!startupNudgeDoneRef.current) {
+      startupNudgeDoneRef.current = true;
+      try {
+        if (
+          typeof model.getValue === "function" &&
+          typeof model.setValue === "function"
+        ) {
+          const current = model.getValue();
+          model.setValue(current);
+        }
+      } catch (error) {
+        console.error("Monaco startup nudge failed", error);
+      }
+    }
+  }, []);
+
   const vscodeApiConfig = useMemo(
     () => ({
       $type: "extended",
       viewsConfig: { $type: "EditorService" },
-      advanced: { loadThemes: false },
       userConfiguration: {
-        json: buildBootstrapConfigJson(fontSize, fontFamily, lineNumbers),
+        json: buildConfigJson(theme, fontSize, fontFamily, lineNumbers),
       },
       monacoWorkerFactory: configureDefaultWorkerFactory,
     }),
-    // Intentionally static — runtime changes go through updateUserConfiguration
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [theme, fontSize, fontFamily, lineNumbers],
   );
 
-  // Push config to the live VS Code configuration service.
-  // Fires when: editor becomes ready, themes finish loading, or any setting prop changes.
-  // Both editorReady AND themesReady must be true (services must exist + theme JSONs fetched).
   useEffect(() => {
-    if (!editorReady || !themesReady) return;
-    updateUserConfiguration(buildConfigJson(theme, fontSize, fontFamily, lineNumbers));
-  }, [editorReady, themesReady, theme, fontSize, fontFamily, lineNumbers]);
+    if (!editorReady) return;
+    const json = buildConfigJson(theme, fontSize, fontFamily, lineNumbers);
+    void updateUserConfiguration(json)
+      .then(() => {
+        // Nudge Monaco to re-read theme/token colors without requiring user edits.
+        requestAnimationFrame(() => refreshEditorPresentation());
+      })
+      .catch((error) => {
+        // Keep editor usable even if configuration write fails.
+        console.error("failed to apply Monaco user configuration", error);
+      });
+  }, [
+    editorReady,
+    extensionsReady,
+    theme,
+    fontSize,
+    fontFamily,
+    lineNumbers,
+    refreshEditorPresentation,
+  ]);
 
   const editorAppConfig = useMemo(
     () => ({
@@ -88,9 +167,7 @@ export default function GopadMonacoEditor({
         },
       },
     }),
-    // Only use workspaceDir for URI — code synced via onTextChanged
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [workspaceDir]
+    [code, workspaceDir],
   );
 
   const languageClientConfig = useMemo(() => {
@@ -120,17 +197,17 @@ export default function GopadMonacoEditor({
         onCodeChange(textChanges.modified);
       }
     },
-    [onCodeChange]
+    [onCodeChange],
   );
 
   const handleEditorStartDone = useCallback(
     (app) => {
+      editorAppRef.current = app;
       setEditorReady(true);
-      if (onEditorReady) {
-        onEditorReady(app);
-      }
+      requestAnimationFrame(() => refreshEditorPresentation());
+      if (onEditorReady) onEditorReady(app);
     },
-    [onEditorReady]
+    [onEditorReady, refreshEditorPresentation],
   );
 
   return (
@@ -141,7 +218,9 @@ export default function GopadMonacoEditor({
       languageClientConfig={languageClientConfig}
       onTextChanged={handleTextChanged}
       onEditorStartDone={handleEditorStartDone}
-      onError={(e) => console.error("Monaco editor error:", e)}
+      onError={(e) => {
+        console.error("Monaco error", e);
+      }}
     />
   );
 }
