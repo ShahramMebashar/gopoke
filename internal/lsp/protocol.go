@@ -67,23 +67,33 @@ type TextDocumentPositionParams struct {
 
 // --- Completion types ---
 
+// TextEdit represents an LSP text edit with a range and replacement text.
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
 // CompletionItem is a simplified completion result for the frontend.
 type CompletionItem struct {
-	Label      string `json:"label"`
-	Detail     string `json:"detail"`
-	Kind       string `json:"kind"`
-	InsertText string `json:"insertText"`
-	SortText   string `json:"sortText"`
+	Label               string     `json:"label"`
+	Detail              string     `json:"detail"`
+	Kind                string     `json:"kind"`
+	InsertText          string     `json:"insertText"`
+	SortText            string     `json:"sortText"`
+	TextEdit            *TextEdit  `json:"textEdit,omitempty"`
+	AdditionalTextEdits []TextEdit `json:"additionalTextEdits,omitempty"`
 }
 
 // lspCompletionItem is the raw LSP completion item from gopls.
 type lspCompletionItem struct {
-	Label            string `json:"label"`
-	Kind             int    `json:"kind"`
-	Detail           string `json:"detail"`
-	InsertText       string `json:"insertText"`
-	InsertTextFormat int    `json:"insertTextFormat"`
-	SortText         string `json:"sortText"`
+	Label               string     `json:"label"`
+	Kind                int        `json:"kind"`
+	Detail              string     `json:"detail"`
+	InsertText          string     `json:"insertText"`
+	InsertTextFormat    int        `json:"insertTextFormat"`
+	SortText            string     `json:"sortText"`
+	TextEdit            *TextEdit  `json:"textEdit,omitempty"`
+	AdditionalTextEdits []TextEdit `json:"additionalTextEdits,omitempty"`
 }
 
 // lspCompletionList is the raw LSP completion response.

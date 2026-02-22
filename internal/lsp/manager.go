@@ -128,7 +128,8 @@ func (m *Manager) initializeLocked(ctx context.Context) error {
 			"textDocument": map[string]any{
 				"completion": map[string]any{
 					"completionItem": map[string]any{
-						"snippetSupport": false,
+						"snippetSupport":             false,
+						"additionalTextEditsSupport": true,
 					},
 				},
 				"hover":                map[string]any{},
@@ -240,11 +241,13 @@ func (m *Manager) Completion(ctx context.Context, line, column int) ([]Completio
 			insertText = item.Label
 		}
 		completions = append(completions, CompletionItem{
-			Label:      item.Label,
-			Detail:     item.Detail,
-			Kind:       completionItemKindString(item.Kind),
-			InsertText: insertText,
-			SortText:   item.SortText,
+			Label:               item.Label,
+			Detail:              item.Detail,
+			Kind:                completionItemKindString(item.Kind),
+			InsertText:          insertText,
+			SortText:            item.SortText,
+			TextEdit:            item.TextEdit,
+			AdditionalTextEdits: item.AdditionalTextEdits,
 		})
 	}
 	return completions, nil

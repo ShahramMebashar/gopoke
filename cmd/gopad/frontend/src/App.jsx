@@ -375,15 +375,50 @@ function lspCompletionSource(context) {
   return completion(lineNumber, column)
     .then((items) => {
       if (!items || items.length === 0) return null;
+
+      // Use the first item's textEdit range for the result-level 'from'
+      // so CodeMirror can filter completions against the typed prefix.
+      let from = context.pos;
+      const firstEdit = items[0]?.textEdit;
+      if (firstEdit?.range) {
+        const startLine = context.state.doc.line(firstEdit.range.start.line + 1);
+        from = startLine.from + firstEdit.range.start.character;
+      }
+
       return {
-        from: context.pos,
-        options: items.map((item) => ({
-          label: item.label || item.Label || "",
-          detail: item.detail || item.Detail || "",
-          type: item.kind || item.Kind || "text",
-          apply: item.insertText || item.InsertText || item.label || item.Label || "",
-          boost: item.sortText ? -parseInt(item.sortText, 10) || 0 : 0,
-        })),
+        from,
+        options: items.map((item) => {
+          const label = item.label || item.Label || "";
+          const textEdit = item.textEdit;
+          const additionalEdits = item.additionalTextEdits;
+          const insertText = textEdit?.newText || item.insertText || item.InsertText || label;
+
+          const option = {
+            label,
+            detail: item.detail || item.Detail || "",
+            type: item.kind || item.Kind || "text",
+            boost: item.sortText ? -parseInt(item.sortText, 10) || 0 : 0,
+          };
+
+          if (additionalEdits && additionalEdits.length > 0) {
+            // Use apply function to batch primary edit with auto-imports
+            option.apply = (view, _completion, from, to) => {
+              const changes = [{ from, to, insert: insertText }];
+              for (const edit of additionalEdits) {
+                const editLine = view.state.doc.line(edit.range.start.line + 1);
+                const editFrom = editLine.from + edit.range.start.character;
+                const editEndLine = view.state.doc.line(edit.range.end.line + 1);
+                const editTo = editEndLine.from + edit.range.end.character;
+                changes.push({ from: editFrom, to: editTo, insert: edit.newText });
+              }
+              view.dispatch({ changes });
+            };
+          } else {
+            option.apply = insertText;
+          }
+
+          return option;
+        }),
       };
     })
     .catch(() => null);
