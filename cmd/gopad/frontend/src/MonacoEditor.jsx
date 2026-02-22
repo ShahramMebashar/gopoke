@@ -1,7 +1,38 @@
-import React, { useMemo, useRef, useCallback } from "react";
+import React, { useMemo, useRef, useCallback, useState, useEffect } from "react";
 import * as vscode from "vscode";
 import { MonacoEditorReactComp } from "@typefox/monaco-editor-react";
 import { configureDefaultWorkerFactory } from "monaco-languageclient/workerFactory";
+import { updateUserConfiguration } from "@codingame/monaco-vscode-configuration-service-override";
+
+// Side-effect imports: register VS Code theme + Go language extensions
+import "@codingame/monaco-vscode-go-default-extension";
+import { allThemesReady } from "./themes.js";
+
+// Full config including theme — used after services + themes are ready
+function buildConfigJson(theme, fontSize, fontFamily, lineNumbers) {
+  return JSON.stringify({
+    "workbench.colorTheme": theme,
+    "editor.fontSize": fontSize,
+    "editor.fontFamily": fontFamily,
+    "editor.lineNumbers": lineNumbers,
+    "editor.minimap.enabled": false,
+    "editor.wordBasedSuggestions": "off",
+    "editor.lightbulb.enabled": "On",
+  });
+}
+
+// Bootstrap config WITHOUT theme — theme is applied later via updateUserConfiguration
+// so the config service detects a genuine file change when we add the theme key.
+function buildBootstrapConfigJson(fontSize, fontFamily, lineNumbers) {
+  return JSON.stringify({
+    "editor.fontSize": fontSize,
+    "editor.fontFamily": fontFamily,
+    "editor.lineNumbers": lineNumbers,
+    "editor.minimap.enabled": false,
+    "editor.wordBasedSuggestions": "off",
+    "editor.lightbulb.enabled": "On",
+  });
+}
 
 export default function GopadMonacoEditor({
   code,
@@ -14,27 +45,39 @@ export default function GopadMonacoEditor({
   lineNumbers = "on",
   onEditorReady,
 }) {
-  const reprocessRef = useRef(0);
+  const [editorReady, setEditorReady] = useState(false);
+  const [themesReady, setThemesReady] = useState(false);
 
+  // Track when all theme JSONs have been fetched
+  useEffect(() => {
+    let cancelled = false;
+    allThemesReady.then(() => { if (!cancelled) setThemesReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // One-time bootstrap config — consumed once by apiWrapper.start()
   const vscodeApiConfig = useMemo(
     () => ({
       $type: "extended",
       viewsConfig: { $type: "EditorService" },
+      advanced: { loadThemes: false },
       userConfiguration: {
-        json: JSON.stringify({
-          "workbench.colorTheme": theme,
-          "editor.fontSize": fontSize,
-          "editor.fontFamily": fontFamily,
-          "editor.lineNumbers": lineNumbers,
-          "editor.minimap.enabled": false,
-          "editor.wordBasedSuggestions": "off",
-          "editor.lightbulb.enabled": "On",
-        }),
+        json: buildBootstrapConfigJson(fontSize, fontFamily, lineNumbers),
       },
       monacoWorkerFactory: configureDefaultWorkerFactory,
     }),
-    [theme, fontSize, fontFamily, lineNumbers]
+    // Intentionally static — runtime changes go through updateUserConfiguration
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
+
+  // Push config to the live VS Code configuration service.
+  // Fires when: editor becomes ready, themes finish loading, or any setting prop changes.
+  // Both editorReady AND themesReady must be true (services must exist + theme JSONs fetched).
+  useEffect(() => {
+    if (!editorReady || !themesReady) return;
+    updateUserConfiguration(buildConfigJson(theme, fontSize, fontFamily, lineNumbers));
+  }, [editorReady, themesReady, theme, fontSize, fontFamily, lineNumbers]);
 
   const editorAppConfig = useMemo(
     () => ({
@@ -82,18 +125,13 @@ export default function GopadMonacoEditor({
 
   const handleEditorStartDone = useCallback(
     (app) => {
+      setEditorReady(true);
       if (onEditorReady) {
         onEditorReady(app);
       }
     },
     [onEditorReady]
   );
-
-  // Bump reprocess counter when config props change
-  const reprocessCounter = useMemo(() => {
-    reprocessRef.current += 1;
-    return reprocessRef.current;
-  }, [vscodeApiConfig]);
 
   return (
     <MonacoEditorReactComp
@@ -104,7 +142,6 @@ export default function GopadMonacoEditor({
       onTextChanged={handleTextChanged}
       onEditorStartDone={handleEditorStartDone}
       onError={(e) => console.error("Monaco editor error:", e)}
-      triggerReprocessConfig={reprocessCounter}
     />
   );
 }

@@ -104,15 +104,14 @@ func (b *WailsBridge) Startup(ctx context.Context) {
 	b.startupErr = b.app.Start(ctx)
 	b.mu.Unlock()
 
-	// Start LSP against scratch workspace for immediate completions
-	go func() {
-		scratchDir := b.app.ScratchDir()
-		if scratchDir != "" {
-			if lspErr := b.app.StartLSP(ctx, scratchDir); lspErr != nil {
-				fmt.Printf("scratch gopls start: %v\n", lspErr)
-			}
+	// Start LSP against scratch workspace for immediate completions.
+	// Synchronous so the port is available when the frontend mounts.
+	scratchDir := b.app.ScratchDir()
+	if scratchDir != "" {
+		if lspErr := b.app.StartLSP(context.Background(), scratchDir); lspErr != nil {
+			fmt.Printf("scratch gopls start: %v\n", lspErr)
 		}
-	}()
+	}
 }
 
 // Shutdown is called by Wails at app shutdown.
@@ -159,14 +158,13 @@ func (b *WailsBridge) OpenProject(path string) (project.OpenProjectResult, error
 		return project.OpenProjectResult{}, fmt.Errorf("open project: %w", err)
 	}
 
-	// Start LSP in background — non-blocking, errors logged not returned.
-	// Use context.Background() because ctx is tied to the Wails request
-	// lifetime, which ends before gopls finishes starting.
-	go func() {
-		if lspErr := b.app.StartLSP(context.Background(), path); lspErr != nil {
-			fmt.Printf("gopls start: %v\n", lspErr)
-		}
-	}()
+	// Start LSP synchronously so the port is available when the frontend
+	// immediately calls LSPWebSocketPort() after OpenProject returns.
+	// StartLSP is fast (find binary + create workspace + bind port);
+	// the actual Serve loop runs in a background goroutine inside the manager.
+	if lspErr := b.app.StartLSP(context.Background(), path); lspErr != nil {
+		fmt.Printf("gopls start: %v\n", lspErr)
+	}
 
 	return result, nil
 }
