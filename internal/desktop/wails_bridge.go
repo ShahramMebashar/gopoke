@@ -11,6 +11,7 @@ import (
 
 	"gopad/internal/execution"
 	"gopad/internal/lsp"
+	"gopad/internal/playground"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -69,6 +70,8 @@ type ApplicationService interface {
 	LSPWebSocketPort(ctx context.Context) int
 	LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInfo
 	LSPStatus(ctx context.Context) lsp.StatusResult
+	PlaygroundShare(ctx context.Context, source string) (playground.ShareResult, error)
+	PlaygroundImport(ctx context.Context, urlOrHash string) (string, error)
 	ScratchDir() string
 }
 
@@ -457,6 +460,24 @@ func (b *WailsBridge) LSPStatus() (lsp.StatusResult, error) {
 		return lsp.StatusResult{}, err
 	}
 	return b.app.LSPStatus(ctx), nil
+}
+
+// PlaygroundShare uploads source to the Go Playground and returns the URL.
+func (b *WailsBridge) PlaygroundShare(source string) (playground.ShareResult, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return playground.ShareResult{}, err
+	}
+	return b.app.PlaygroundShare(ctx, source)
+}
+
+// PlaygroundImport fetches source from a Go Playground URL.
+func (b *WailsBridge) PlaygroundImport(urlOrHash string) (string, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return "", err
+	}
+	return b.app.PlaygroundImport(ctx, urlOrHash)
 }
 
 func (b *WailsBridge) requestContext() (context.Context, error) {

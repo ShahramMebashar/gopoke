@@ -112,6 +112,16 @@ export function onRunStderrChunk(callback) {
   return () => {};
 }
 
+// --- Playground bridge functions ---
+
+export async function playgroundShare(source) {
+  return requireBridge().PlaygroundShare(source);
+}
+
+export async function playgroundImport(urlOrHash) {
+  return requireBridge().PlaygroundImport(urlOrHash);
+}
+
 // --- LSP bridge functions ---
 
 export async function lspWebSocketPort() {

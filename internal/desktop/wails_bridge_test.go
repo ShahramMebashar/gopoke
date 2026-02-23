@@ -8,6 +8,7 @@ import (
 
 	"gopad/internal/execution"
 	"gopad/internal/lsp"
+	"gopad/internal/playground"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -176,6 +177,14 @@ func (f *fakeApplication) LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInf
 
 func (f *fakeApplication) LSPStatus(ctx context.Context) lsp.StatusResult {
 	return f.lspStatus
+}
+
+func (f *fakeApplication) PlaygroundShare(ctx context.Context, source string) (playground.ShareResult, error) {
+	return playground.ShareResult{URL: "https://go.dev/play/p/test", Hash: "test"}, nil
+}
+
+func (f *fakeApplication) PlaygroundImport(ctx context.Context, urlOrHash string) (string, error) {
+	return "package main\n", nil
 }
 
 func (f *fakeApplication) ScratchDir() string { return "" }

@@ -7,6 +7,8 @@ import {
   deleteProjectEnvVar,
   deleteProjectSnippet,
   formatSnippet,
+  playgroundShare,
+  playgroundImport,
   lspStatus,
   lspWebSocketPort,
   lspWorkspaceInfo,
@@ -1021,6 +1023,46 @@ export default function App() {
     }
   }, [snippet]);
 
+  const handlePlaygroundShare = useCallback(async () => {
+    const source = snippetRef.current;
+    if (!source?.trim()) {
+      setStatus({ kind: "error", message: "Nothing to share." });
+      return;
+    }
+    setIsBusy(true);
+    setStatus({ kind: "info", message: "Sharing to Go Playground..." });
+    try {
+      const result = await playgroundShare(source);
+      const url = result?.url || result?.URL || result?.Url || "";
+      if (url) {
+        await navigator.clipboard.writeText(url);
+        setStatus({ kind: "success", message: `Shared! URL copied: ${url}` });
+      } else {
+        setStatus({ kind: "success", message: "Shared to Go Playground." });
+      }
+    } catch (error) {
+      setStatus({ kind: "error", message: normalizeError(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
+
+  const handlePlaygroundImport = useCallback(async () => {
+    const url = window.prompt("Enter Go Playground URL or hash:");
+    if (!url?.trim()) return;
+    setIsBusy(true);
+    setStatus({ kind: "info", message: "Importing from Go Playground..." });
+    try {
+      const source = await playgroundImport(url);
+      setSnippet(source);
+      setStatus({ kind: "success", message: "Imported from Go Playground." });
+    } catch (error) {
+      setStatus({ kind: "error", message: normalizeError(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
+
   const executeRun = useCallback(
     async (sourceToRun) => {
       setIsBusy(true);
@@ -1132,6 +1174,8 @@ export default function App() {
         ? void handleCancelRun()
         : void handleRunSnippet(),
     rerun: () => void handleRerunLast(),
+    share: () => void handlePlaygroundShare(),
+    import: () => void handlePlaygroundImport(),
     settings: () => setSettingsOpen((v) => !v),
   };
 

@@ -17,6 +17,7 @@ import (
 	"gopad/internal/execution"
 	"gopad/internal/formatting"
 	"gopad/internal/lsp"
+	"gopad/internal/playground"
 	"gopad/internal/project"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
@@ -754,6 +755,22 @@ func (a *Application) LSPStatus(ctx context.Context) lsp.StatusResult {
 		return lsp.StatusResult{Ready: false, Error: "lsp not initialized"}
 	}
 	return a.lspManager.Status()
+}
+
+// PlaygroundShare uploads the snippet to the Go Playground.
+func (a *Application) PlaygroundShare(ctx context.Context, source string) (playground.ShareResult, error) {
+	if strings.TrimSpace(source) == "" {
+		return playground.ShareResult{}, fmt.Errorf("source is required")
+	}
+	return playground.Share(ctx, source)
+}
+
+// PlaygroundImport fetches source from a Go Playground URL.
+func (a *Application) PlaygroundImport(ctx context.Context, urlOrHash string) (string, error) {
+	if strings.TrimSpace(urlOrHash) == "" {
+		return "", fmt.Errorf("playground URL or hash is required")
+	}
+	return playground.Import(ctx, urlOrHash)
 }
 
 func (a *Application) projectRecordByPath(ctx context.Context, projectPath string) (storage.ProjectRecord, error) {
