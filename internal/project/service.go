@@ -86,9 +86,9 @@ func (s *Service) Open(ctx context.Context, path string) (OpenProjectResult, err
 		if envErr != nil {
 			return OpenProjectResult{}, fmt.Errorf("load current env vars: %w", envErr)
 		}
-		existingByKey := make(map[string]struct{}, len(currentEnv))
+		existingByKey := make(map[string]storage.EnvVarRecord, len(currentEnv))
 		for _, variable := range currentEnv {
-			existingByKey[variable.Key] = struct{}{}
+			existingByKey[variable.Key] = variable
 		}
 
 		keys := make([]string, 0, len(envFromFile))
@@ -97,10 +97,11 @@ func (s *Service) Open(ctx context.Context, path string) (OpenProjectResult, err
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			if _, exists := existingByKey[key]; exists {
-				continue
+			masked := false
+			if existing, exists := existingByKey[key]; exists {
+				masked = existing.Masked
 			}
-			if _, envErr := s.store.UpdateProjectEnvVar(ctx, record.ID, key, envFromFile[key], false); envErr != nil {
+			if _, envErr := s.store.UpdateProjectEnvVar(ctx, record.ID, key, envFromFile[key], masked); envErr != nil {
 				return OpenProjectResult{}, fmt.Errorf("persist .env variable %q: %w", key, envErr)
 			}
 		}

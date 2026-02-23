@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GopadMonacoEditor from "./MonacoEditor";
 import RichOutput from "./renderers/RichOutput";
+import Toolbar from "./Toolbar";
 import {
   availableToolchains,
   cancelRun,
@@ -418,6 +419,9 @@ export default function App() {
   const [editorSettings, setEditorSettings] = useState(loadEditorSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Platform detection: default to darwin to prevent HTML toolbar flash on macOS
+  const [platform, setPlatform] = useState("darwin");
+
   const updateEditorSetting = useCallback((key, value) => {
     setEditorSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -437,6 +441,17 @@ export default function App() {
   const runHandlerRef = useRef(null);
   const saveFileHandlerRef = useRef(null);
   const editorAppRef = useRef(null);
+
+  // Helper: push content into both Monaco model and React state.
+  // Monaco ignores prop updates after mount, so we must call model.setValue() directly.
+  const setEditorContent = useCallback((content) => {
+    const editor = editorAppRef.current?.getEditor?.();
+    const model = editor?.getModel?.();
+    if (model) {
+      model.setValue(content);
+    }
+    setSnippet(content);
+  }, []);
 
   const lineCount = useMemo(
     () => (snippet.length === 0 ? 0 : snippet.split("\n").length),
@@ -567,6 +582,17 @@ export default function App() {
       } catch {}
     };
     fetchLspInfo();
+  }, []);
+
+  // Detect platform once on mount (Wails runtime API)
+  useEffect(() => {
+    const detect = async () => {
+      try {
+        const env = await window.runtime.Environment();
+        if (env?.platform) setPlatform(env.platform);
+      } catch {}
+    };
+    detect();
   }, []);
 
   useEffect(() => {
@@ -753,7 +779,7 @@ export default function App() {
       const projectRaw = raw?.projectResult;
       const result = normalizeOpenProjectResult(projectRaw);
 
-      setSnippet(content);
+      setEditorContent(content);
       setActiveFilePath(filePath);
       setActiveProjectResult(result);
       setRunState("idle");
@@ -959,16 +985,16 @@ export default function App() {
     if (!record) return;
     setSelectedSnippetId(record.ID);
     setSnippetNameInput(record.Name);
-    setSnippet(record.Content || "");
+    setEditorContent(record.Content || "");
     setStatus({ kind: "info", message: `Loaded snippet: ${record.Name}` });
-  }, []);
+  }, [setEditorContent]);
 
   const handleCreateNewSnippet = useCallback(() => {
     setSelectedSnippetId("");
     setSnippetNameInput("New Snippet");
-    setSnippet(defaultSnippet);
+    setEditorContent(defaultSnippet);
     setStatus({ kind: "info", message: "Preparing a new snippet." });
-  }, []);
+  }, [setEditorContent]);
 
   const handleSaveSnippet = useCallback(async () => {
     if (!activeProjectResult?.Project?.Path) {
@@ -1116,23 +1142,18 @@ export default function App() {
         console.warn("LSP format failed, falling back to gofmt", lspErr);
       }
     }
-    // Fallback to backend format.Source(), push directly into Monaco model
+    // Fallback to backend format.Source()
     setIsBusy(true);
     try {
       const formatted = await formatSnippet(snippet);
-      const model = editor?.getModel?.();
-      if (model) {
-        model.setValue(formatted);
-      } else {
-        setSnippet(formatted);
-      }
+      setEditorContent(formatted);
       setStatus({ kind: "success", message: "Snippet formatted with gofmt." });
     } catch (error) {
       setStatus({ kind: "error", message: normalizeError(error) });
     } finally {
       setIsBusy(false);
     }
-  }, [snippet]);
+  }, [snippet, setEditorContent]);
 
   const handlePlaygroundShare = useCallback(async () => {
     const source = snippetRef.current;
@@ -1165,14 +1186,14 @@ export default function App() {
     setStatus({ kind: "info", message: "Importing from Go Playground..." });
     try {
       const source = await playgroundImport(url);
-      setSnippet(source);
+      setEditorContent(source);
       setStatus({ kind: "success", message: "Imported from Go Playground." });
     } catch (error) {
       setStatus({ kind: "error", message: normalizeError(error) });
     } finally {
       setIsBusy(false);
     }
-  }, []);
+  }, [setEditorContent]);
 
   const executeRun = useCallback(
     async (sourceToRun) => {
@@ -1308,6 +1329,11 @@ export default function App() {
     settings: () => setSettingsOpen((v) => !v),
   };
 
+  const handleToolbarAction = useCallback((action) => {
+    const handler = toolbarHandlers.current[action];
+    if (handler) handler();
+  }, []);
+
   useEffect(() => {
     window.__gopadToolbarAction = (action) => {
       const handler = toolbarHandlers.current[action];
@@ -1331,7 +1357,10 @@ export default function App() {
   ];
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-platform={platform}>
+      {platform !== "darwin" && (
+        <Toolbar runState={runState} onAction={handleToolbarAction} />
+      )}
       <div className="main-content">
         {sidebarOpen && (
           <aside className="sidebar">

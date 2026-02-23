@@ -57,6 +57,10 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-top: 0;
+}
+
+.app-shell[data-platform="darwin"] {
   padding-top: 52px;
 }
 
@@ -819,7 +823,7 @@ button:disabled {
 
 .settings-panel {
   position: fixed;
-  top: 52px;
+  top: 40px;
   right: 0;
   bottom: 0;
   width: 360px;
@@ -837,6 +841,70 @@ button:disabled {
 @keyframes settings-slide-in {
   from { transform: translateX(100%); }
   to   { transform: translateX(0); }
+}
+
+.app-shell[data-platform="darwin"] .settings-panel {
+  top: 52px;
+}
+
+/* ── HTML Toolbar (non-macOS) ────────────── */
+
+.html-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 2px;
+  background: rgba(8, 16, 26, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.toolbar-btn {
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  box-shadow: none;
+  transform: none;
+}
+
+.toolbar-btn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.toolbar-btn.running {
+  color: #ef4444;
+}
+
+.toolbar-btn.running:hover:not(:disabled) {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .settings-header {

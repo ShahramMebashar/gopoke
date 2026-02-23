@@ -89,7 +89,8 @@ func (r *Recorder) MarkFirstOutput(runID string, firstOutputAt time.Time) (RunEv
 		firstOutputAt = state.triggeredAt
 	}
 
-	delete(r.runs, runID)
+	state.closed = true
+	r.runs[runID] = state
 
 	return RunEvent{
 		RunID:             runID,
