@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GopadMonacoEditor from "./MonacoEditor";
+import RichOutput from "./renderers/RichOutput";
 import {
   availableToolchains,
   cancelRun,
@@ -80,7 +81,10 @@ const defaultSnippet = [
   'import "fmt"',
   "",
   "func main() {",
-  '\tfmt.Println("hello from gopad")',
+  '\tfmt.Println("Starting report...")',
+  '\tfmt.Println(`//gopad:table [{"endpoint":"/api/users","latency_ms":12},{"endpoint":"/api/orders","latency_ms":45}]`)',
+  '\tfmt.Println(`//gopad:json {"total_requests":1520,"avg_latency_ms":28.5,"status":"healthy"}`)',
+  '\tfmt.Println("Done.")',
   "}",
 ].join("\n");
 
@@ -145,6 +149,8 @@ function emptyRunResult() {
     StdoutTruncated: false,
     StderrTruncated: false,
     Diagnostics: [],
+    CleanStdout: "",
+    RichBlocks: [],
   };
 }
 
@@ -386,6 +392,7 @@ export default function App() {
   const [activeRunId, setActiveRunId] = useState("");
   const [lastRunSource, setLastRunSource] = useState("");
   const [runState, setRunState] = useState("idle");
+  const [outputTab, setOutputTab] = useState("raw");
 
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -439,16 +446,24 @@ export default function App() {
     () => normalizeDiagnostics(runResult ? runResult.Diagnostics : []),
     [runResult],
   );
+  const richBlocks = useMemo(() => {
+    if (!runResult) return [];
+    return Array.isArray(runResult.RichBlocks) ? runResult.RichBlocks : [];
+  }, [runResult]);
+  const hasRichBlocks = richBlocks.length > 0;
   const combinedOutput = useMemo(() => {
     if (!runResult) return "";
+    const stdout = hasRichBlocks && runResult.CleanStdout != null
+      ? runResult.CleanStdout
+      : runResult.Stdout;
     const parts = [];
-    if (runResult.Stdout) parts.push(runResult.Stdout);
+    if (stdout) parts.push(stdout);
     if (runResult.Stderr) {
       if (parts.length > 0) parts.push("\n--- stderr ---\n");
       parts.push(runResult.Stderr);
     }
     return parts.join("");
-  }, [runResult]);
+  }, [runResult, hasRichBlocks]);
 
   const filteredSnippets = useMemo(() => {
     const search = snippetSearch.trim().toLowerCase();
@@ -1097,13 +1112,20 @@ export default function App() {
           setStatus({ kind: "success", message: "Formatted via gopls." });
           return;
         }
-      } catch {}
+      } catch (lspErr) {
+        console.warn("LSP format failed, falling back to gofmt", lspErr);
+      }
     }
-    // Fallback to backend format.Source()
+    // Fallback to backend format.Source(), push directly into Monaco model
     setIsBusy(true);
     try {
       const formatted = await formatSnippet(snippet);
-      setSnippet(formatted);
+      const model = editor?.getModel?.();
+      if (model) {
+        model.setValue(formatted);
+      } else {
+        setSnippet(formatted);
+      }
       setStatus({ kind: "success", message: "Snippet formatted with gofmt." });
     } catch (error) {
       setStatus({ kind: "error", message: normalizeError(error) });
@@ -1174,6 +1196,8 @@ export default function App() {
           source: sourceToRun,
         });
         setRunResult(result);
+        const blocks = Array.isArray(result.RichBlocks) ? result.RichBlocks : [];
+        setOutputTab(blocks.length > 0 ? "rich" : "raw");
         if (result.Canceled) {
           setRunState("canceled");
           setStatus({ kind: "info", message: "Run canceled." });
@@ -1656,6 +1680,20 @@ export default function App() {
                     </ul>
                   </details>
                   <details className="help-details">
+                    <summary>Rich Output</summary>
+                    <p style={{ color: "var(--text-soft)", fontSize: 12, margin: "6px 0 4px" }}>
+                      Print special markers to render tables and JSON cards in the Rich tab.
+                    </p>
+                    <ul className="help-tips">
+                      <li><strong>Table:</strong> <code>{"//gopad:table [{\"col\":\"val\"}]"}</code></li>
+                      <li><strong>JSON card:</strong> <code>{"//gopad:json {\"key\":\"val\"}"}</code></li>
+                      <li>Marker lines are stripped from Raw output.</li>
+                      <li>Rich tab auto-selects when blocks are present.</li>
+                      <li>Malformed JSON stays in raw output (no block created).</li>
+                      <li>Unknown types show a fallback with raw JSON.</li>
+                    </ul>
+                  </details>
+                  <details className="help-details">
                     <summary>Tips</summary>
                     <ul className="help-tips">
                       <li>Use Format (gofmt) before run for cleaner diagnostics.</li>
@@ -1736,7 +1774,33 @@ export default function App() {
             </div>
           )}
           {runResult ? (
-            <pre className="output-content">{combinedOutput || "(no output)"}</pre>
+            <>
+              {hasRichBlocks && (
+                <div className="output-tabs">
+                  <button
+                    type="button"
+                    className={`output-tab ${outputTab === "rich" ? "active" : ""}`}
+                    onClick={() => setOutputTab("rich")}
+                  >
+                    Rich
+                  </button>
+                  <button
+                    type="button"
+                    className={`output-tab ${outputTab === "raw" ? "active" : ""}`}
+                    onClick={() => setOutputTab("raw")}
+                  >
+                    Raw
+                  </button>
+                </div>
+              )}
+              {outputTab === "rich" && hasRichBlocks ? (
+                <div className="output-rich-scroll">
+                  <RichOutput blocks={richBlocks} />
+                </div>
+              ) : (
+                <pre className="output-content">{combinedOutput || "(no output)"}</pre>
+              )}
+            </>
           ) : (
             <div className="output-empty">Run a snippet to see output</div>
           )}

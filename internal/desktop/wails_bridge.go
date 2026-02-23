@@ -578,12 +578,7 @@ func generateBridgeRunID() string {
 }
 
 func defaultOpenFileDialog(ctx context.Context) (string, error) {
-	path, err := runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{
-		Title: "Open Go File",
-		Filters: []runtime.FileFilter{
-			{DisplayName: "Go Files (*.go)", Pattern: "*.go"},
-		},
-	})
+	path, err := openGoFileDialog(ctx)
 	if err != nil {
 		return "", err
 	}

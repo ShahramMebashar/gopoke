@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -63,17 +64,25 @@ type Diagnostic struct {
 	Message string
 }
 
+// RichBlock mirrors richoutput.RichBlock for JSON serialization to the frontend.
+type RichBlock struct {
+	Type string          `json:"type"`
+	Data json.RawMessage `json:"data"`
+}
+
 // Result contains one snippet execution outcome.
 type Result struct {
-	Stdout          string
-	Stderr          string
-	ExitCode        int
-	DurationMS      int64
-	TimedOut        bool
-	Canceled        bool
-	StdoutTruncated bool
-	StderrTruncated bool
-	Diagnostics     []Diagnostic
+	Stdout          string       `json:"Stdout"`
+	Stderr          string       `json:"Stderr"`
+	ExitCode        int          `json:"ExitCode"`
+	DurationMS      int64        `json:"DurationMS"`
+	TimedOut        bool         `json:"TimedOut"`
+	Canceled        bool         `json:"Canceled"`
+	StdoutTruncated bool         `json:"StdoutTruncated"`
+	StderrTruncated bool         `json:"StderrTruncated"`
+	Diagnostics     []Diagnostic `json:"Diagnostics"`
+	CleanStdout     string       `json:"CleanStdout,omitempty"`
+	RichBlocks      []RichBlock  `json:"RichBlocks,omitempty"`
 }
 
 // RunGoSnippet executes a Go snippet with `go run` in the selected project context.

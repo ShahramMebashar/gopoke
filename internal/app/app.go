@@ -19,6 +19,7 @@ import (
 	"gopad/internal/lsp"
 	"gopad/internal/playground"
 	"gopad/internal/project"
+	"gopad/internal/richoutput"
 	"gopad/internal/runner"
 	"gopad/internal/storage"
 	"gopad/internal/telemetry"
@@ -446,6 +447,10 @@ func (a *Application) RunSnippet(
 	}
 	result.Diagnostics = convertDiagnostics(diagnostics.ParseAll(result.Stderr))
 
+	cleanStdout, richBlocks := richoutput.Parse(result.Stdout)
+	result.CleanStdout = cleanStdout
+	result.RichBlocks = convertRichBlocks(richBlocks)
+
 	if err := a.recordRunResult(ctx, runID, resolvedRequest.projectID, runStartedAt, result); err != nil {
 		a.logger.Warn("record run metadata failed", "runID", runID, "error", err)
 	}
@@ -688,6 +693,20 @@ func convertDiagnostics(items []diagnostics.Diagnostic) []execution.Diagnostic {
 	return converted
 }
 
+func convertRichBlocks(blocks []richoutput.RichBlock) []execution.RichBlock {
+	if len(blocks) == 0 {
+		return nil
+	}
+	converted := make([]execution.RichBlock, len(blocks))
+	for i, b := range blocks {
+		converted[i] = execution.RichBlock{
+			Type: b.Type,
+			Data: b.Data,
+		}
+	}
+	return converted
+}
+
 // StartProjectWorker ensures a long-lived worker process exists for a project.
 func (a *Application) StartProjectWorker(ctx context.Context, projectPath string) (runner.Worker, error) {
 	if a.workers == nil {
@@ -807,6 +826,9 @@ func (a *Application) SaveGoFile(ctx context.Context, filePath string, content s
 	}
 	if !strings.HasSuffix(resolvedPath, ".go") {
 		return fmt.Errorf("file must have .go extension")
+	}
+	if _, err := os.Stat(resolvedPath); err != nil {
+		return fmt.Errorf("file must already exist to save: %w", err)
 	}
 	if err := os.WriteFile(resolvedPath, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("write file: %w", err)

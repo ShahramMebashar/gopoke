@@ -725,3 +725,18 @@ func TestAppOpenGoFileRejectsNonGo(t *testing.T) {
 		t.Fatal("OpenGoFile() error = nil, want error for non-.go file")
 	}
 }
+
+func TestAppSaveGoFileRejectsNonExistent(t *testing.T) {
+	t.Parallel()
+
+	a := app.NewWithDataRoot(t.TempDir())
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer a.Stop(context.Background())
+
+	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.go")
+	if err := a.SaveGoFile(context.Background(), nonExistent, "package main\n"); err == nil {
+		t.Fatal("SaveGoFile() error = nil, want error for non-existent file")
+	}
+}
