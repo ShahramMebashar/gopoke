@@ -27,6 +27,13 @@ import (
 // DefaultShutdownTimeout controls graceful shutdown time for the app.
 const DefaultShutdownTimeout = 5 * time.Second
 
+// OpenGoFileResult holds content and project context from opening a single .go file.
+type OpenGoFileResult struct {
+	Content       string                    `json:"content"`
+	FilePath      string                    `json:"filePath"`
+	ProjectResult project.OpenProjectResult `json:"projectResult"`
+}
+
 const (
 	runStatusSuccess  = "success"
 	runStatusFailed   = "failed"
@@ -755,6 +762,56 @@ func (a *Application) LSPStatus(ctx context.Context) lsp.StatusResult {
 		return lsp.StatusResult{Ready: false, Error: "lsp not initialized"}
 	}
 	return a.lspManager.Status()
+}
+
+// OpenGoFile reads a single .go file and opens its parent directory as a project.
+func (a *Application) OpenGoFile(ctx context.Context, filePath string) (OpenGoFileResult, error) {
+	resolvedPath, err := resolveInputPath(filePath)
+	if err != nil {
+		return OpenGoFileResult{}, err
+	}
+	if !strings.HasSuffix(resolvedPath, ".go") {
+		return OpenGoFileResult{}, fmt.Errorf("file must have .go extension")
+	}
+	info, err := os.Stat(resolvedPath)
+	if err != nil {
+		return OpenGoFileResult{}, fmt.Errorf("inspect file: %w", err)
+	}
+	if info.IsDir() {
+		return OpenGoFileResult{}, fmt.Errorf("path is a directory, not a file")
+	}
+	content, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return OpenGoFileResult{}, fmt.Errorf("read file: %w", err)
+	}
+	projectDir := filepath.Dir(resolvedPath)
+	projectResult, err := a.OpenProject(ctx, projectDir)
+	if err != nil {
+		return OpenGoFileResult{}, fmt.Errorf("open parent project: %w", err)
+	}
+	return OpenGoFileResult{
+		Content:       string(content),
+		FilePath:      resolvedPath,
+		ProjectResult: projectResult,
+	}, nil
+}
+
+// SaveGoFile writes content back to a .go file on disk.
+func (a *Application) SaveGoFile(ctx context.Context, filePath string, content string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("save file context: %w", err)
+	}
+	resolvedPath, err := resolveInputPath(filePath)
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(resolvedPath, ".go") {
+		return fmt.Errorf("file must have .go extension")
+	}
+	if err := os.WriteFile(resolvedPath, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
 }
 
 // PlaygroundShare uploads the snippet to the Go Playground.

@@ -3,10 +3,12 @@ import GopadMonacoEditor from "./MonacoEditor";
 import {
   availableToolchains,
   cancelRun,
+  chooseGoFile,
   chooseProjectDirectory,
   deleteProjectEnvVar,
   deleteProjectSnippet,
   formatSnippet,
+  openGoFile,
   playgroundShare,
   playgroundImport,
   lspStatus,
@@ -19,6 +21,7 @@ import {
   projectSnippets,
   recentProjects,
   runSnippet,
+  saveGoFile,
   saveProjectSnippet,
   setProjectDefaultPackage,
   setProjectToolchain,
@@ -416,12 +419,17 @@ export default function App() {
     });
   }, []);
 
+  // File import state: tracks the on-disk .go file path when opened via "Open File"
+  const [activeFilePath, setActiveFilePath] = useState("");
+
   // LSP connection state
   const [lspPort, setLspPort] = useState(0);
   const [lspWorkspaceDir, setLspWorkspaceDir] = useState("");
 
   const activeRunIdRef = useRef("");
   const runHandlerRef = useRef(null);
+  const saveFileHandlerRef = useRef(null);
+  const editorAppRef = useRef(null);
 
   const lineCount = useMemo(
     () => (snippet.length === 0 ? 0 : snippet.split("\n").length),
@@ -589,6 +597,12 @@ export default function App() {
       const isMod = event.metaKey || event.ctrlKey;
       if (!isMod) return;
 
+      if (event.key === "s" || event.key === "S") {
+        event.preventDefault();
+        saveFileHandlerRef.current?.();
+        return;
+      }
+
       if (event.key === "Enter") {
         event.preventDefault();
         runHandlerRef.current?.();
@@ -631,6 +645,7 @@ export default function App() {
         const raw = await openProject(trimmed);
         const result = normalizeOpenProjectResult(raw);
         setActiveProjectResult(result);
+        setActiveFilePath("");
         setRunState("idle");
         setRunResult(null);
         const targets = readProjectTargets(result);
@@ -708,6 +723,67 @@ export default function App() {
       setStatus({ kind: "error", message: normalizeError(error) });
     }
   }, [handleOpenProject]);
+
+  const handlePickGoFile = useCallback(async () => {
+    try {
+      const selectedPath = await chooseGoFile();
+      if (typeof selectedPath !== "string" || selectedPath.trim().length === 0) {
+        setStatus({ kind: "info", message: "No file selected." });
+        return;
+      }
+      setIsBusy(true);
+      const raw = await openGoFile(selectedPath);
+      const content = raw?.content || "";
+      const filePath = raw?.filePath || selectedPath;
+      const projectRaw = raw?.projectResult;
+      const result = normalizeOpenProjectResult(projectRaw);
+
+      setSnippet(content);
+      setActiveFilePath(filePath);
+      setActiveProjectResult(result);
+      setRunState("idle");
+      setRunResult(null);
+
+      const targets = readProjectTargets(result);
+      const defaultTarget =
+        result?.Project?.DefaultPkg ||
+        (targets.length > 0 ? targets[0].Package : "");
+      setSelectedTarget(defaultTarget);
+      setProjectPathInput(result?.Project?.Path || "");
+
+      const loadedEnv = readOpenEnvVars(result);
+      setEnvVars(loadedEnv);
+      setEnvRevealMap({});
+      setEnvKeyInput("");
+      setEnvValueInput("");
+      setEnvMaskedInput(false);
+
+      setWorkingDirectory(result?.Project?.WorkingDir || result?.Project?.Path || "");
+      setSelectedToolchain(result?.Project?.Toolchain || "go");
+      setSelectedSnippetId("");
+      setSnippetNameInput("");
+      setSnippetSearch("");
+
+      await Promise.all([
+        loadRecentProjects(),
+        refreshProjectSnippets(result?.Project?.Path || ""),
+        refreshToolchains(result?.Project?.Toolchain || ""),
+      ]);
+
+      try {
+        const port = await lspWebSocketPort();
+        const wsInfo = await lspWorkspaceInfo();
+        setLspPort(port || 0);
+        setLspWorkspaceDir(wsInfo?.dir || "");
+      } catch {}
+
+      setStatus({ kind: "success", message: `Opened file: ${filePath}` });
+    } catch (error) {
+      setStatus({ kind: "error", message: normalizeError(error) });
+    } finally {
+      setIsBusy(false);
+    }
+  }, [loadRecentProjects, refreshProjectSnippets, refreshToolchains]);
 
   const handleSaveDefaultTarget = useCallback(async () => {
     if (!activeProjectResult || !activeProjectResult.Project.Path) {
@@ -1011,6 +1087,19 @@ export default function App() {
   }, [activeProjectResult, refreshProjectSnippets, selectedSnippetId]);
 
   const handleFormatSnippet = useCallback(async () => {
+    // Prefer LSP-based formatting (gopls: goimports + gofmt) via Monaco action
+    const editor = editorAppRef.current?.getEditor?.();
+    if (editor) {
+      try {
+        const action = editor.getAction("editor.action.formatDocument");
+        if (action) {
+          await action.run();
+          setStatus({ kind: "success", message: "Formatted via gopls." });
+          return;
+        }
+      } catch {}
+    }
+    // Fallback to backend format.Source()
     setIsBusy(true);
     try {
       const formatted = await formatSnippet(snippet);
@@ -1126,8 +1215,23 @@ export default function App() {
     await executeRun(snippetRef.current);
   }, [executeRun]);
 
-  // Keep ref updated for keyboard handler
+  // Keep refs updated for keyboard handlers
   runHandlerRef.current = handleRunSnippet;
+
+  const activeFilePathRef = useRef(activeFilePath);
+  activeFilePathRef.current = activeFilePath;
+
+  const handleSaveFileToDisk = useCallback(async () => {
+    const filePath = activeFilePathRef.current;
+    if (!filePath) return;
+    try {
+      await saveGoFile(filePath, snippetRef.current);
+      setStatus({ kind: "success", message: `Saved: ${filePath}` });
+    } catch (error) {
+      setStatus({ kind: "error", message: normalizeError(error) });
+    }
+  }, []);
+  saveFileHandlerRef.current = handleSaveFileToDisk;
 
   const handleRerunLast = useCallback(async () => {
     if (!lastRunSource) {
@@ -1167,6 +1271,7 @@ export default function App() {
   toolbarHandlers.current = {
     toggleSidebar: () => setSidebarOpen((v) => !v),
     openFolder: () => void handlePickDirectory(),
+    openFile: () => void handlePickGoFile(),
     newSnippet: handleCreateNewSnippet,
     format: () => void handleFormatSnippet(),
     run: () =>
@@ -1533,7 +1638,7 @@ export default function App() {
                 <div className="sidebar-section">
                   <h2>Quick Start</h2>
                   <ol className="help-checklist">
-                    <li>Open a Go project with Open Folder or Open Path.</li>
+                    <li>Open a Go project with Open Folder, or open a single .go file with Open File.</li>
                     <li>Run your snippet with Run (Cmd+Enter).</li>
                     <li>Cancel long runs by clicking the stop button.</li>
                     <li>Save useful code from the Snippets tab.</li>
@@ -1541,6 +1646,7 @@ export default function App() {
                   <details className="help-details">
                     <summary>Keyboard Shortcuts</summary>
                     <ul className="help-tips">
+                      <li>Cmd+S — Save file to disk (when a .go file is open)</li>
                       <li>Cmd+B — Toggle sidebar</li>
                       <li>Cmd+1 — Snippets tab</li>
                       <li>Cmd+2 — Env tab</li>
@@ -1573,11 +1679,13 @@ export default function App() {
             fontSize={editorSettings.fontSize}
             fontFamily={editorSettings.fontFamily}
             lineNumbers={editorSettings.lineNumbers ? "on" : "off"}
+            onEditorReady={(app) => { editorAppRef.current = app; }}
           />
           <div className="editor-status">
             <span>{lineCount} lines</span>
             <span>{snippet.length} chars</span>
             {selectedSnippetId && <span>{snippetNameInput}</span>}
+            {activeFilePath && <span title={activeFilePath}>{activeFilePath.split("/").pop()}</span>}
             <span className="status-spacer" />
             <span className={`status-run-state ${runState}`}>{runStateLabel(runState)}</span>
             {runResult && runResult.DurationMS != null && (

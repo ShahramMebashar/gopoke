@@ -24,6 +24,18 @@ export async function chooseProjectDirectory() {
   return requireBridge().ChooseProjectDirectory();
 }
 
+export async function chooseGoFile() {
+  return requireBridge().ChooseGoFile();
+}
+
+export async function openGoFile(filePath) {
+  return requireBridge().OpenGoFile(filePath);
+}
+
+export async function saveGoFile(filePath, content) {
+  return requireBridge().SaveGoFile(filePath, content);
+}
+
 export async function recentProjects(limit = 12) {
   return requireBridge().RecentProjects(limit);
 }

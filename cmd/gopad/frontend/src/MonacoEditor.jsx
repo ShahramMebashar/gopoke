@@ -17,6 +17,8 @@ function buildConfigJson(theme, fontSize, fontFamily, lineNumbers) {
     "editor.minimap.enabled": false,
     "editor.wordBasedSuggestions": "off",
     "editor.lightbulb.enabled": "On",
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go",
   });
 }
 

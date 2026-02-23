@@ -3,9 +3,12 @@ package desktop
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"gopad/internal/app"
 	"gopad/internal/execution"
 	"gopad/internal/lsp"
 	"gopad/internal/playground"
@@ -57,6 +60,11 @@ type fakeApplication struct {
 	lspStatus           lsp.StatusResult
 	lspWSPort           int
 	lspWorkspaceInfo    lsp.WorkspaceInfo
+	openGoFileResp      app.OpenGoFileResult
+	openGoFileErr       error
+	saveGoFileErr       error
+	savedGoFilePath     string
+	savedGoFileContent  string
 }
 
 func (f *fakeApplication) Start(ctx context.Context) error {
@@ -185,6 +193,16 @@ func (f *fakeApplication) PlaygroundShare(ctx context.Context, source string) (p
 
 func (f *fakeApplication) PlaygroundImport(ctx context.Context, urlOrHash string) (string, error) {
 	return "package main\n", nil
+}
+
+func (f *fakeApplication) OpenGoFile(ctx context.Context, filePath string) (app.OpenGoFileResult, error) {
+	return f.openGoFileResp, f.openGoFileErr
+}
+
+func (f *fakeApplication) SaveGoFile(ctx context.Context, filePath string, content string) error {
+	f.savedGoFilePath = filePath
+	f.savedGoFileContent = content
+	return f.saveGoFileErr
 }
 
 func (f *fakeApplication) ScratchDir() string { return "" }
@@ -559,5 +577,151 @@ func TestWailsBridgeCancelRun(t *testing.T) {
 	}
 	if got, want := fake.canceledRunIDs[0], "run_cancel_1"; got != want {
 		t.Fatalf("canceled run ID = %q, want %q", got, want)
+	}
+}
+
+func TestWailsBridgeChooseGoFile(t *testing.T) {
+	t.Parallel()
+
+	bridge := NewWailsBridge(&fakeApplication{})
+	bridge.Startup(context.Background())
+	bridge.openFileDialog = func(ctx context.Context) (string, error) {
+		return "/tmp/main.go", nil
+	}
+
+	path, err := bridge.ChooseGoFile()
+	if err != nil {
+		t.Fatalf("ChooseGoFile() error = %v", err)
+	}
+	if got, want := path, "/tmp/main.go"; got != want {
+		t.Fatalf("path = %q, want %q", got, want)
+	}
+}
+
+func TestWailsBridgeOpenGoFile(t *testing.T) {
+	t.Parallel()
+
+	bridge := NewWailsBridge(&fakeApplication{
+		openGoFileResp: app.OpenGoFileResult{
+			Content:  "package main\n",
+			FilePath: "/tmp/project/main.go",
+			ProjectResult: project.OpenProjectResult{
+				Project: storage.ProjectRecord{ID: "p1", Path: "/tmp/project"},
+			},
+		},
+	})
+	bridge.Startup(context.Background())
+
+	result, err := bridge.OpenGoFile("/tmp/project/main.go")
+	if err != nil {
+		t.Fatalf("OpenGoFile() error = %v", err)
+	}
+	if got, want := result.Content, "package main\n"; got != want {
+		t.Fatalf("result.Content = %q, want %q", got, want)
+	}
+	if got, want := result.FilePath, "/tmp/project/main.go"; got != want {
+		t.Fatalf("result.FilePath = %q, want %q", got, want)
+	}
+	if got, want := result.ProjectResult.Project.Path, "/tmp/project"; got != want {
+		t.Fatalf("result.ProjectResult.Project.Path = %q, want %q", got, want)
+	}
+}
+
+func TestWailsBridgeSaveGoFile(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeApplication{}
+	bridge := NewWailsBridge(fake)
+	bridge.Startup(context.Background())
+
+	content := "package main\n\nfunc main() {}\n"
+	if err := bridge.SaveGoFile("/tmp/project/main.go", content); err != nil {
+		t.Fatalf("SaveGoFile() error = %v", err)
+	}
+	if got, want := fake.savedGoFilePath, "/tmp/project/main.go"; got != want {
+		t.Fatalf("saved path = %q, want %q", got, want)
+	}
+	if got, want := fake.savedGoFileContent, content; got != want {
+		t.Fatalf("saved content = %q, want %q", got, want)
+	}
+}
+
+func TestAppOpenGoFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(goFile, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+	// Create go.mod so OpenProject succeeds
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module test\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	a := app.NewWithDataRoot(t.TempDir())
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer a.Stop(context.Background())
+
+	result, err := a.OpenGoFile(context.Background(), goFile)
+	if err != nil {
+		t.Fatalf("OpenGoFile() error = %v", err)
+	}
+	if got, want := result.Content, "package main\n"; got != want {
+		t.Fatalf("content = %q, want %q", got, want)
+	}
+	if got, want := result.FilePath, goFile; got != want {
+		t.Fatalf("filePath = %q, want %q", got, want)
+	}
+}
+
+func TestAppSaveGoFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	goFile := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(goFile, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	a := app.NewWithDataRoot(t.TempDir())
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer a.Stop(context.Background())
+
+	newContent := "package main\n\nfunc main() {}\n"
+	if err := a.SaveGoFile(context.Background(), goFile, newContent); err != nil {
+		t.Fatalf("SaveGoFile() error = %v", err)
+	}
+
+	read, err := os.ReadFile(goFile)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if got, want := string(read), newContent; got != want {
+		t.Fatalf("file content = %q, want %q", got, want)
+	}
+}
+
+func TestAppOpenGoFileRejectsNonGo(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	txtFile := filepath.Join(dir, "main.txt")
+	if err := os.WriteFile(txtFile, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	a := app.NewWithDataRoot(t.TempDir())
+	if err := a.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer a.Stop(context.Background())
+
+	if _, err := a.OpenGoFile(context.Background(), txtFile); err == nil {
+		t.Fatal("OpenGoFile() error = nil, want error for non-.go file")
 	}
 }

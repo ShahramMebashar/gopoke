@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"gopad/internal/app"
 	"gopad/internal/execution"
 	"gopad/internal/lsp"
 	"gopad/internal/playground"
@@ -70,6 +71,8 @@ type ApplicationService interface {
 	LSPWebSocketPort(ctx context.Context) int
 	LSPWorkspaceInfo(ctx context.Context) lsp.WorkspaceInfo
 	LSPStatus(ctx context.Context) lsp.StatusResult
+	OpenGoFile(ctx context.Context, filePath string) (app.OpenGoFileResult, error)
+	SaveGoFile(ctx context.Context, filePath string, content string) error
 	PlaygroundShare(ctx context.Context, source string) (playground.ShareResult, error)
 	PlaygroundImport(ctx context.Context, urlOrHash string) (string, error)
 	ScratchDir() string
@@ -86,6 +89,7 @@ type WailsBridge struct {
 	shutdownErr error
 
 	openDirectoryDialog func(ctx context.Context) (string, error)
+	openFileDialog      func(ctx context.Context) (string, error)
 	emitEvent           func(ctx context.Context, eventName string, payload interface{})
 }
 
@@ -95,6 +99,7 @@ func NewWailsBridge(app ApplicationService) *WailsBridge {
 		app:                 app,
 		ctx:                 context.Background(),
 		openDirectoryDialog: defaultOpenDirectoryDialog,
+		openFileDialog:      defaultOpenFileDialog,
 		emitEvent:           defaultEmitEvent,
 	}
 }
@@ -462,6 +467,50 @@ func (b *WailsBridge) LSPStatus() (lsp.StatusResult, error) {
 	return b.app.LSPStatus(ctx), nil
 }
 
+// ChooseGoFile opens a native file picker filtered to .go files.
+func (b *WailsBridge) ChooseGoFile() (string, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return "", err
+	}
+	path, err := b.openFileDialog(ctx)
+	if err != nil {
+		return "", fmt.Errorf("choose go file: %w", err)
+	}
+	return path, nil
+}
+
+// OpenGoFile reads a .go file and opens its parent directory as project context.
+func (b *WailsBridge) OpenGoFile(filePath string) (app.OpenGoFileResult, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return app.OpenGoFileResult{}, err
+	}
+	result, err := b.app.OpenGoFile(ctx, filePath)
+	if err != nil {
+		return app.OpenGoFileResult{}, fmt.Errorf("open go file: %w", err)
+	}
+
+	// Start LSP synchronously for the parent directory.
+	if lspErr := b.app.StartLSP(context.Background(), result.ProjectResult.Project.Path); lspErr != nil {
+		fmt.Printf("gopls start (file): %v\n", lspErr)
+	}
+
+	return result, nil
+}
+
+// SaveGoFile writes content back to a .go file on disk.
+func (b *WailsBridge) SaveGoFile(filePath string, content string) error {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return err
+	}
+	if err := b.app.SaveGoFile(ctx, filePath, content); err != nil {
+		return fmt.Errorf("save go file: %w", err)
+	}
+	return nil
+}
+
 // PlaygroundShare uploads source to the Go Playground and returns the URL.
 func (b *WailsBridge) PlaygroundShare(source string) (playground.ShareResult, error) {
 	ctx, err := b.requestContext()
@@ -526,6 +575,19 @@ func generateBridgeRunID() string {
 		return "run_" + hex.EncodeToString(b)
 	}
 	return "run_" + hex.EncodeToString(b)
+}
+
+func defaultOpenFileDialog(ctx context.Context) (string, error) {
+	path, err := runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{
+		Title: "Open Go File",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Go Files (*.go)", Pattern: "*.go"},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(path), nil
 }
 
 func defaultEmitEvent(ctx context.Context, eventName string, payload interface{}) {
