@@ -419,6 +419,10 @@ export default function App() {
   const [editorSettings, setEditorSettings] = useState(loadEditorSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Import dialog state (replaces window.prompt which doesn't work in WKWebView)
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importDialogValue, setImportDialogValue] = useState("");
+
   // Platform detection: default to darwin to prevent HTML toolbar flash on macOS
   const [platform, setPlatform] = useState("darwin");
 
@@ -1179,8 +1183,13 @@ export default function App() {
     }
   }, []);
 
-  const handlePlaygroundImport = useCallback(async () => {
-    const url = window.prompt("Enter Go Playground URL or hash:");
+  const handlePlaygroundImportOpen = useCallback(() => {
+    setImportDialogValue("");
+    setImportDialogOpen(true);
+  }, []);
+
+  const handlePlaygroundImportSubmit = useCallback(async (url) => {
+    setImportDialogOpen(false);
     if (!url?.trim()) return;
     setIsBusy(true);
     setStatus({ kind: "info", message: "Importing from Go Playground..." });
@@ -1325,7 +1334,7 @@ export default function App() {
         : void handleRunSnippet(),
     rerun: () => void handleRerunLast(),
     share: () => void handlePlaygroundShare(),
-    import: () => void handlePlaygroundImport(),
+    import: () => void handlePlaygroundImportOpen(),
     settings: () => setSettingsOpen((v) => !v),
   };
 
@@ -1836,6 +1845,46 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {importDialogOpen && (
+        <>
+          <div className="import-dialog-overlay" onClick={() => setImportDialogOpen(false)} />
+          <div
+            className="import-dialog"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setImportDialogOpen(false);
+              if (e.key === "Enter") handlePlaygroundImportSubmit(importDialogValue);
+            }}
+          >
+            <h3>Import from Go Playground</h3>
+            <input
+              type="text"
+              className="import-dialog-input"
+              placeholder="URL or hash, e.g. https://go.dev/play/p/abc123"
+              value={importDialogValue}
+              onChange={(e) => setImportDialogValue(e.target.value)}
+              autoFocus
+            />
+            <div className="import-dialog-buttons">
+              <button
+                type="button"
+                className="import-dialog-btn cancel"
+                onClick={() => setImportDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="import-dialog-btn confirm"
+                onClick={() => handlePlaygroundImportSubmit(importDialogValue)}
+                disabled={!importDialogValue.trim()}
+              >
+                Import
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {settingsOpen && (
         <>
