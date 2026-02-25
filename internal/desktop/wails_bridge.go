@@ -5,16 +5,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"gopoke/internal/app"
+	"gopoke/internal/download"
 	"gopoke/internal/execution"
 	"gopoke/internal/lsp"
 	"gopoke/internal/playground"
 	"gopoke/internal/project"
 	"gopoke/internal/runner"
+	"gopoke/internal/settings"
 	"gopoke/internal/storage"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -25,6 +28,9 @@ var NativeToolbarUpdater func(isRunning bool)
 
 const runStdoutChunkEventName = "gopoke:run:stdout-chunk"
 const runStderrChunkEventName = "gopoke:run:stderr-chunk"
+const toolchainProgressEventName = "toolchain:download:progress"
+const toolchainCompleteEventName = "toolchain:download:complete"
+const toolchainErrorEventName = "toolchain:download:error"
 
 // RunStdoutChunkEvent contains streamed stdout payload for one run.
 type RunStdoutChunkEvent struct {
@@ -75,12 +81,16 @@ type ApplicationService interface {
 	SaveGoFile(ctx context.Context, filePath string, content string) error
 	PlaygroundShare(ctx context.Context, source string) (playground.ShareResult, error)
 	PlaygroundImport(ctx context.Context, urlOrHash string) (string, error)
+	GetGlobalSettings(ctx context.Context) (settings.GlobalSettings, error)
+	UpdateGlobalSettings(ctx context.Context, gs settings.GlobalSettings) (settings.GlobalSettings, error)
+	DetectToolVersions(ctx context.Context) app.ToolVersions
 	ScratchDir() string
 }
 
 // WailsBridge exposes backend methods to the Wails frontend.
 type WailsBridge struct {
-	app ApplicationService
+	app      ApplicationService
+	downloads *download.Manager
 
 	mu          sync.RWMutex
 	ctx         context.Context
@@ -97,6 +107,7 @@ type WailsBridge struct {
 func NewWailsBridge(app ApplicationService) *WailsBridge {
 	return &WailsBridge{
 		app:                 app,
+		downloads:           download.NewManager(download.DefaultBaseDir()),
 		ctx:                 context.Background(),
 		openDirectoryDialog: defaultOpenDirectoryDialog,
 		openFileDialog:      defaultOpenFileDialog,
@@ -509,6 +520,144 @@ func (b *WailsBridge) SaveGoFile(filePath string, content string) error {
 		return fmt.Errorf("save go file: %w", err)
 	}
 	return nil
+}
+
+// GetGlobalSettings returns the current global settings.
+func (b *WailsBridge) GetGlobalSettings() (settings.GlobalSettings, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return settings.GlobalSettings{}, err
+	}
+	return b.app.GetGlobalSettings(ctx)
+}
+
+// UpdateGlobalSettings saves new global settings.
+func (b *WailsBridge) UpdateGlobalSettings(gs settings.GlobalSettings) (settings.GlobalSettings, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return settings.GlobalSettings{}, err
+	}
+	return b.app.UpdateGlobalSettings(ctx, gs)
+}
+
+// DetectToolVersions returns detected versions for go, gopls, staticcheck.
+func (b *WailsBridge) DetectToolVersions() (app.ToolVersions, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return app.ToolVersions{}, err
+	}
+	return b.app.DetectToolVersions(ctx), nil
+}
+
+// ListGoVersions fetches available Go SDK versions from go.dev.
+func (b *WailsBridge) ListGoVersions() ([]download.GoVersion, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return nil, err
+	}
+	return download.ListGoVersions(ctx)
+}
+
+// DownloadGoSDK triggers Go SDK download with progress events.
+func (b *WailsBridge) DownloadGoSDK(version string) error {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		dlErr := b.downloads.DownloadGoSDK(ctx, version, func(p download.Progress) {
+			b.emitEvent(ctx, toolchainProgressEventName, p)
+		})
+		if dlErr != nil {
+			b.emitEvent(ctx, toolchainErrorEventName, map[string]string{
+				"tool":    "go",
+				"message": dlErr.Error(),
+			})
+			return
+		}
+		b.emitEvent(ctx, toolchainCompleteEventName, map[string]string{
+			"tool": "go",
+			"path": b.downloads.GoBinPath(),
+		})
+	}()
+
+	return nil
+}
+
+// DownloadGopls triggers gopls installation with progress events.
+func (b *WailsBridge) DownloadGopls() error {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return err
+	}
+
+	gs, _ := b.app.GetGlobalSettings(ctx)
+	goPath := gs.GoPath
+
+	go func() {
+		dlErr := b.downloads.InstallGopls(ctx, goPath, func(p download.Progress) {
+			b.emitEvent(ctx, toolchainProgressEventName, p)
+		})
+		if dlErr != nil {
+			b.emitEvent(ctx, toolchainErrorEventName, map[string]string{
+				"tool":    "gopls",
+				"message": dlErr.Error(),
+			})
+			return
+		}
+		b.emitEvent(ctx, toolchainCompleteEventName, map[string]string{
+			"tool": "gopls",
+			"path": filepath.Join(b.downloads.ToolBinDir(), "gopls"),
+		})
+	}()
+
+	return nil
+}
+
+// DownloadStaticcheck triggers staticcheck installation with progress events.
+func (b *WailsBridge) DownloadStaticcheck() error {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return err
+	}
+
+	gs, _ := b.app.GetGlobalSettings(ctx)
+	goPath := gs.GoPath
+
+	go func() {
+		dlErr := b.downloads.InstallStaticcheck(ctx, goPath, func(p download.Progress) {
+			b.emitEvent(ctx, toolchainProgressEventName, p)
+		})
+		if dlErr != nil {
+			b.emitEvent(ctx, toolchainErrorEventName, map[string]string{
+				"tool":    "staticcheck",
+				"message": dlErr.Error(),
+			})
+			return
+		}
+		b.emitEvent(ctx, toolchainCompleteEventName, map[string]string{
+			"tool": "staticcheck",
+			"path": filepath.Join(b.downloads.ToolBinDir(), "staticcheck"),
+		})
+	}()
+
+	return nil
+}
+
+// BrowseForBinary opens a native file picker for selecting a binary.
+func (b *WailsBridge) BrowseForBinary(title string) (string, error) {
+	ctx, err := b.requestContext()
+	if err != nil {
+		return "", err
+	}
+	path, err := runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{
+		Title: title,
+	})
+	if err != nil {
+		return "", fmt.Errorf("browse for binary: %w", err)
+	}
+	return strings.TrimSpace(path), nil
 }
 
 // PlaygroundShare uploads source to the Go Playground and returns the URL.

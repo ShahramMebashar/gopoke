@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"gopoke/internal/project"
 	"gopoke/internal/richoutput"
 	"gopoke/internal/runner"
+	"gopoke/internal/settings"
 	"gopoke/internal/storage"
 	"gopoke/internal/telemetry"
 )
@@ -89,6 +91,9 @@ func (a *Application) Start(ctx context.Context) error {
 	if err := a.store.Bootstrap(ctx); err != nil {
 		return fmt.Errorf("bootstrap storage: %w", err)
 	}
+
+	// Prepend configured tool paths to PATH so exec.LookPath finds them.
+	a.applyToolchainPaths(ctx)
 
 	// Create scratch workspace for projectless mode
 	scratchDir := filepath.Join(os.TempDir(), fmt.Sprintf("gopoke-scratch-%d", os.Getpid()))
@@ -850,6 +855,120 @@ func (a *Application) PlaygroundImport(ctx context.Context, urlOrHash string) (s
 		return "", fmt.Errorf("playground URL or hash is required")
 	}
 	return playground.Import(ctx, urlOrHash)
+}
+
+// ToolVersions holds detected versions for key tools.
+type ToolVersions struct {
+	GoVersion          string `json:"goVersion"`
+	GoPath             string `json:"goPath"`
+	GoplsVersion       string `json:"goplsVersion"`
+	GoplsPath          string `json:"goplsPath"`
+	StaticcheckVersion string `json:"staticcheckVersion"`
+	StaticcheckPath    string `json:"staticcheckPath"`
+}
+
+// GetGlobalSettings returns the current global settings.
+func (a *Application) GetGlobalSettings(ctx context.Context) (settings.GlobalSettings, error) {
+	if a.store == nil {
+		return settings.GlobalSettings{}, fmt.Errorf("storage service not initialized")
+	}
+	return a.store.GetSettings(ctx)
+}
+
+// UpdateGlobalSettings saves new global settings.
+func (a *Application) UpdateGlobalSettings(ctx context.Context, gs settings.GlobalSettings) (settings.GlobalSettings, error) {
+	if a.store == nil {
+		return settings.GlobalSettings{}, fmt.Errorf("storage service not initialized")
+	}
+	return a.store.UpdateSettings(ctx, gs)
+}
+
+// DetectToolVersions checks installed tool versions.
+func (a *Application) DetectToolVersions(ctx context.Context) ToolVersions {
+	result := ToolVersions{}
+
+	if goPath, err := exec.LookPath("go"); err == nil {
+		result.GoPath = goPath
+		if out, err := exec.CommandContext(ctx, goPath, "version").Output(); err == nil {
+			result.GoVersion = strings.TrimSpace(string(out))
+		}
+	}
+
+	if goplsPath, err := exec.LookPath("gopls"); err == nil {
+		result.GoplsPath = goplsPath
+		if out, err := exec.CommandContext(ctx, goplsPath, "version").Output(); err == nil {
+			result.GoplsVersion = strings.TrimSpace(string(out))
+		}
+	}
+
+	if scPath, err := exec.LookPath("staticcheck"); err == nil {
+		result.StaticcheckPath = scPath
+		if out, err := exec.CommandContext(ctx, scPath, "-version").Output(); err == nil {
+			result.StaticcheckVersion = strings.TrimSpace(string(out))
+		}
+	}
+
+	return result
+}
+
+// applyToolchainPaths reads global settings and prepends configured tool
+// directories to PATH so that exec.LookPath finds them. Also sets GOROOT
+// when a managed Go SDK path is configured.
+func (a *Application) applyToolchainPaths(ctx context.Context) {
+	gs, err := a.store.GetSettings(ctx)
+	if err != nil {
+		a.logger.Warn("load global settings for PATH setup", "error", err)
+		return
+	}
+
+	var prepend []string
+
+	if gs.GoPath != "" {
+		binDir := filepath.Dir(gs.GoPath) // e.g. /path/to/go/bin/go → /path/to/go/bin
+		if info, statErr := os.Stat(gs.GoPath); statErr == nil && !info.IsDir() {
+			prepend = append(prepend, binDir)
+			// Set GOROOT to the parent of bin/ (e.g. /path/to/go)
+			goRoot := filepath.Dir(binDir)
+			os.Setenv("GOROOT", goRoot)
+			a.logger.Info("configured GOROOT from settings", "goRoot", goRoot)
+		} else {
+			a.logger.Warn("configured go path not found, skipping", "path", gs.GoPath)
+		}
+	}
+
+	if gs.GoplsPath != "" {
+		if info, statErr := os.Stat(gs.GoplsPath); statErr == nil && !info.IsDir() {
+			prepend = append(prepend, filepath.Dir(gs.GoplsPath))
+		} else {
+			a.logger.Warn("configured gopls path not found, skipping", "path", gs.GoplsPath)
+		}
+	}
+
+	if gs.StaticcheckPath != "" {
+		if info, statErr := os.Stat(gs.StaticcheckPath); statErr == nil && !info.IsDir() {
+			prepend = append(prepend, filepath.Dir(gs.StaticcheckPath))
+		} else {
+			a.logger.Warn("configured staticcheck path not found, skipping", "path", gs.StaticcheckPath)
+		}
+	}
+
+	if len(prepend) > 0 {
+		current := os.Getenv("PATH")
+		newPath := strings.Join(prepend, string(os.PathListSeparator))
+		if current != "" {
+			newPath = newPath + string(os.PathListSeparator) + current
+		}
+		os.Setenv("PATH", newPath)
+		a.logger.Info("prepended tool paths to PATH", "added", prepend)
+	}
+
+	// Apply GOPATH/GOMODCACHE overrides
+	if gs.GoPathOverride != "" {
+		os.Setenv("GOPATH", gs.GoPathOverride)
+	}
+	if gs.GoModCacheOverride != "" {
+		os.Setenv("GOMODCACHE", gs.GoModCacheOverride)
+	}
 }
 
 func (a *Application) projectRecordByPath(ctx context.Context, projectPath string) (storage.ProjectRecord, error) {

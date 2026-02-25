@@ -14,6 +14,7 @@ import (
 	"gopoke/internal/playground"
 	"gopoke/internal/project"
 	"gopoke/internal/runner"
+	"gopoke/internal/settings"
 	"gopoke/internal/storage"
 )
 
@@ -203,6 +204,18 @@ func (f *fakeApplication) SaveGoFile(ctx context.Context, filePath string, conte
 	f.savedGoFilePath = filePath
 	f.savedGoFileContent = content
 	return f.saveGoFileErr
+}
+
+func (f *fakeApplication) GetGlobalSettings(ctx context.Context) (settings.GlobalSettings, error) {
+	return settings.Defaults(), nil
+}
+
+func (f *fakeApplication) UpdateGlobalSettings(ctx context.Context, gs settings.GlobalSettings) (settings.GlobalSettings, error) {
+	return gs, nil
+}
+
+func (f *fakeApplication) DetectToolVersions(ctx context.Context) app.ToolVersions {
+	return app.ToolVersions{}
 }
 
 func (f *fakeApplication) ScratchDir() string { return "" }

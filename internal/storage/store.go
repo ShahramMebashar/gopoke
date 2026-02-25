@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopoke/internal/settings"
 )
 
 const stateFileName = "state.json"
@@ -109,6 +111,46 @@ func (s *Store) Load(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("load state: %w", err)
 	}
 	return snapshot, nil
+}
+
+// GetSettings returns the current global settings.
+func (s *Store) GetSettings(ctx context.Context) (settings.GlobalSettings, error) {
+	if err := ctx.Err(); err != nil {
+		return settings.GlobalSettings{}, fmt.Errorf("get settings context: %w", err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshot, err := s.loadLocked()
+	if err != nil {
+		return settings.GlobalSettings{}, fmt.Errorf("load state: %w", err)
+	}
+	return settings.WithDefaults(snapshot.GlobalSettings), nil
+}
+
+// UpdateSettings replaces global settings after validation.
+func (s *Store) UpdateSettings(ctx context.Context, gs settings.GlobalSettings) (settings.GlobalSettings, error) {
+	if err := ctx.Err(); err != nil {
+		return settings.GlobalSettings{}, fmt.Errorf("update settings context: %w", err)
+	}
+
+	validated := settings.Validate(settings.WithDefaults(gs))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	snapshot, err := s.loadLocked()
+	if err != nil {
+		return settings.GlobalSettings{}, fmt.Errorf("load state: %w", err)
+	}
+
+	snapshot.GlobalSettings = validated
+	snapshot.Meta.UpdatedAt = time.Now().UTC()
+	if err := s.writeLocked(snapshot); err != nil {
+		return settings.GlobalSettings{}, fmt.Errorf("persist settings: %w", err)
+	}
+	return validated, nil
 }
 
 // RecordProjectOpen upserts a project and updates its last-opened timestamp.

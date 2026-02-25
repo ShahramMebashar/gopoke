@@ -1249,6 +1249,270 @@ button:disabled {
   color: var(--text-soft);
 }
 
+/* ── Settings tabs ─────────────────────────── */
+
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 20px;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.settings-tab {
+  padding: 10px 16px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: color 100ms ease, border-color 100ms ease;
+}
+
+.settings-tab:hover {
+  color: var(--text-soft);
+}
+
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Toolchain rows ────────────────────────── */
+
+.settings-toolchains {
+  display: flex;
+  flex-direction: column;
+}
+
+.toolchain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toolchain-detect-btn {
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(120, 157, 190, 0.2);
+  background: rgba(29, 45, 62, 0.5);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.toolchain-detect-btn:hover:not(:disabled) {
+  background: rgba(42, 65, 89, 0.6);
+  color: var(--text-soft);
+}
+
+.toolchain-row {
+  gap: 8px;
+}
+
+.toolchain-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toolchain-status {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.status-found {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.status-missing {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.status-downloading {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.12);
+}
+
+.toolchain-version {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolchain-version-path {
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.toolchain-path-row {
+  display: flex;
+  gap: 6px;
+}
+
+.toolchain-path-input {
+  flex: 1;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(120, 157, 190, 0.2);
+  background: rgba(15, 25, 38, 0.6);
+  color: var(--text-main);
+  min-width: 0;
+}
+
+.toolchain-path-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.toolchain-browse-btn {
+  font-size: 10px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(120, 157, 190, 0.2);
+  background: rgba(29, 45, 62, 0.5);
+  color: var(--text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 100ms ease;
+}
+
+.toolchain-browse-btn:hover {
+  background: rgba(42, 65, 89, 0.6);
+}
+
+.toolchain-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolchain-download-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 14px;
+  border-radius: 5px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+
+.toolchain-download-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.toolchain-download-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.go-version-picker {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.go-version-picker select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Download progress ─────────────────────── */
+
+.toolchain-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toolchain-progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.toolchain-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
+.toolchain-progress-text {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolchain-error {
+  font-size: 11px;
+  color: #f87171;
+  padding: 4px 0;
+}
+
+/* ── Advanced tab inputs ───────────────────── */
+
+.settings-input {
+  width: 100%;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  padding: 7px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(120, 157, 190, 0.2);
+  background: rgba(15, 25, 38, 0.6);
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.settings-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.settings-save-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 20px;
+  border-radius: 5px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.settings-save-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.2);
+}
+
+.settings-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Responsive ────────────────────────────── */
 
 @media (max-width: 900px) {

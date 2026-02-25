@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"time"
+
+	"gopoke/internal/settings"
 )
 
 // SchemaVersionV1 is the initial on-disk schema version.
@@ -11,12 +13,13 @@ const SchemaVersionV1 = 1
 
 // Snapshot is persisted as one atomic state file for MVP.
 type Snapshot struct {
-	SchemaVersion int              `json:"schemaVersion"`
-	Projects      []ProjectRecord  `json:"projects"`
-	Snippets      []SnippetRecord  `json:"snippets"`
-	Runs          []RunRecord      `json:"runs"`
-	EnvVars       []EnvVarRecord   `json:"envVars"`
-	Meta          SnapshotMetadata `json:"meta"`
+	SchemaVersion  int                     `json:"schemaVersion"`
+	Projects       []ProjectRecord         `json:"projects"`
+	Snippets       []SnippetRecord         `json:"snippets"`
+	Runs           []RunRecord             `json:"runs"`
+	EnvVars        []EnvVarRecord          `json:"envVars"`
+	GlobalSettings settings.GlobalSettings `json:"globalSettings"`
+	Meta           SnapshotMetadata        `json:"meta"`
 }
 
 // SnapshotMetadata stores top-level bookkeeping.
@@ -76,11 +79,12 @@ func generateID(prefix string) string {
 func newSnapshot() Snapshot {
 	now := time.Now().UTC()
 	return Snapshot{
-		SchemaVersion: SchemaVersionV1,
-		Projects:      make([]ProjectRecord, 0),
-		Snippets:      make([]SnippetRecord, 0),
-		Runs:          make([]RunRecord, 0),
-		EnvVars:       make([]EnvVarRecord, 0),
+		SchemaVersion:  SchemaVersionV1,
+		Projects:       make([]ProjectRecord, 0),
+		Snippets:       make([]SnippetRecord, 0),
+		Runs:           make([]RunRecord, 0),
+		EnvVars:        make([]EnvVarRecord, 0),
+		GlobalSettings: settings.Defaults(),
 		Meta: SnapshotMetadata{
 			CreatedAt: now,
 			UpdatedAt: now,

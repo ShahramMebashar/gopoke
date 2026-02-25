@@ -124,6 +124,79 @@ export function onRunStderrChunk(callback) {
   return () => {};
 }
 
+// --- Global settings bridge functions ---
+
+export async function getGlobalSettings() {
+  return requireBridge().GetGlobalSettings();
+}
+
+export async function updateGlobalSettings(settings) {
+  return requireBridge().UpdateGlobalSettings(settings);
+}
+
+export async function detectToolVersions() {
+  return requireBridge().DetectToolVersions();
+}
+
+export async function listGoVersions() {
+  return requireBridge().ListGoVersions();
+}
+
+export async function downloadGoSDK(version) {
+  return requireBridge().DownloadGoSDK(version);
+}
+
+export async function downloadGopls() {
+  return requireBridge().DownloadGopls();
+}
+
+export async function downloadStaticcheck() {
+  return requireBridge().DownloadStaticcheck();
+}
+
+export async function browseForBinary(title) {
+  return requireBridge().BrowseForBinary(title);
+}
+
+export function onToolchainProgress(callback) {
+  const runtime = runtimeApi();
+  if (!runtime || typeof runtime.EventsOn !== "function") {
+    return () => {};
+  }
+  const cancel = runtime.EventsOn("toolchain:download:progress", callback);
+  if (typeof cancel === "function") return cancel;
+  if (typeof runtime.EventsOff === "function") {
+    return () => runtime.EventsOff("toolchain:download:progress");
+  }
+  return () => {};
+}
+
+export function onToolchainComplete(callback) {
+  const runtime = runtimeApi();
+  if (!runtime || typeof runtime.EventsOn !== "function") {
+    return () => {};
+  }
+  const cancel = runtime.EventsOn("toolchain:download:complete", callback);
+  if (typeof cancel === "function") return cancel;
+  if (typeof runtime.EventsOff === "function") {
+    return () => runtime.EventsOff("toolchain:download:complete");
+  }
+  return () => {};
+}
+
+export function onToolchainError(callback) {
+  const runtime = runtimeApi();
+  if (!runtime || typeof runtime.EventsOn !== "function") {
+    return () => {};
+  }
+  const cancel = runtime.EventsOn("toolchain:download:error", callback);
+  if (typeof cancel === "function") return cancel;
+  if (typeof runtime.EventsOff === "function") {
+    return () => runtime.EventsOff("toolchain:download:error");
+  }
+  return () => {};
+}
+
 // --- Playground bridge functions ---
 
 export async function playgroundShare(source) {

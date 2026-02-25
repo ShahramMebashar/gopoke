@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GopokeMonacoEditor from "./MonacoEditor";
 import RichOutput from "./renderers/RichOutput";
+import SettingsPanel from "./SettingsPanel";
 import Toolbar from "./Toolbar";
 import {
   availableToolchains,
@@ -30,32 +31,6 @@ import {
   setProjectWorkingDirectory,
   upsertProjectEnvVar,
 } from "./wailsBridge";
-
-// Theme metadata: id, group, and 5 swatch colors (bg, fg, keyword, string, accent)
-const monacoThemes = [
-  { id: "Default Dark Modern", group: "dark", colors: ["#1f1f1f", "#cccccc", "#569cd6", "#ce9178", "#007acc"] },
-  { id: "GitHub Dark Default", group: "dark", colors: ["#0d1117", "#e6edf3", "#ff7b72", "#8b949e", "#2f81f7"] },
-  { id: "One Dark Pro", group: "dark", colors: ["#282c34", "#abb2bf", "#c678dd", "#98c379", "#528bff"] },
-  { id: "Dracula", group: "dark", colors: ["#282A36", "#F8F8F2", "#BD93F9", "#FF79C6", "#6272A4"] },
-  { id: "Monokai", group: "dark", colors: ["#272822", "#f8f8f2", "#F92672", "#E6DB74", "#A6E22E"] },
-  { id: "Material Theme Darker", group: "dark", colors: ["#212121", "#EEFFFF", "#C792EA", "#C3E88D", "#FFCC00"] },
-  { id: "Nord", group: "dark", colors: ["#2e3440", "#d8dee9", "#81A1C1", "#A3BE8C", "#88C0D0"] },
-  { id: "Catppuccin Mocha", group: "dark", colors: ["#1e1e2e", "#cdd6f4", "#fab387", "#a6e3a1", "#f5e0dc"] },
-  { id: "Solarized Dark", group: "dark", colors: ["#002B36", "#839496", "#859900", "#2AA198", "#D30102"] },
-  { id: "Default Light Modern", group: "light", colors: ["#ffffff", "#3b3b3b", "#0000ff", "#a31515", "#007acc"] },
-  { id: "GitHub Light Default", group: "light", colors: ["#ffffff", "#1f2328", "#cf222e", "#6e7781", "#0969da"] },
-  { id: "Solarized Light", group: "light", colors: ["#FDF6E3", "#657B83", "#859900", "#2AA198", "#657B83"] },
-  { id: "Default High Contrast", group: "hc", colors: ["#000000", "#ffffff", "#569cd6", "#ce9178", "#ffffff"] },
-  { id: "Default High Contrast Light", group: "hc", colors: ["#ffffff", "#000000", "#0000ff", "#a31515", "#000000"] },
-];
-
-const themeGroups = [
-  { label: "Dark", themes: monacoThemes.filter((t) => t.group === "dark") },
-  { label: "Light", themes: monacoThemes.filter((t) => t.group === "light") },
-  { label: "High Contrast", themes: monacoThemes.filter((t) => t.group === "hc") },
-];
-
-const themeColorsByName = Object.fromEntries(monacoThemes.map((t) => [t.id, t.colors]));
 
 const defaultEditorSettings = {
   theme: "Default Dark Modern",
@@ -1887,113 +1862,11 @@ export default function App() {
       )}
 
       {settingsOpen && (
-        <>
-          <div className="settings-overlay" onClick={() => setSettingsOpen(false)} />
-          <div
-            className="settings-panel"
-            onKeyDown={(e) => { if (e.key === "Escape") setSettingsOpen(false); }}
-          >
-            <div className="settings-header">
-              <h2>Settings</h2>
-              <button
-                type="button"
-                className="settings-close"
-                onClick={() => setSettingsOpen(false)}
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="settings-body">
-              <div className="settings-section">
-                <h3>Theme</h3>
-                <select
-                  value={editorSettings.theme}
-                  onChange={(e) => updateEditorSetting("theme", e.target.value)}
-                >
-                  {themeGroups.map((group) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.themes.map((t) => (
-                        <option key={t.id} value={t.id}>{t.id}</option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </select>
-                {themeColorsByName[editorSettings.theme] && (
-                  <>
-                    <div className="theme-swatch">
-                      {themeColorsByName[editorSettings.theme].map((color, i) => (
-                        <div
-                          key={i}
-                          className="theme-swatch-bar"
-                          style={{ background: color }}
-                        />
-                      ))}
-                    </div>
-                    <div className="theme-swatch-label">
-                      <span>bg</span>
-                      <span>fg</span>
-                      <span>keyword</span>
-                      <span>string</span>
-                      <span>accent</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="settings-section">
-                <h3>Font</h3>
-                <select
-                  value={editorSettings.fontFamily}
-                  onChange={(e) => updateEditorSetting("fontFamily", e.target.value)}
-                >
-                  {["JetBrains Mono", "SF Mono", "Menlo", "Fira Code", "Source Code Pro", "Cascadia Code"].map(
-                    (font) => (
-                      <option key={font} value={font}>{font}</option>
-                    ),
-                  )}
-                </select>
-              </div>
-
-              <div className="settings-section">
-                <h3>Font Size</h3>
-                <div className="settings-stepper">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateEditorSetting("fontSize", Math.max(10, editorSettings.fontSize - 1))
-                    }
-                    disabled={editorSettings.fontSize <= 10}
-                  >
-                    &minus;
-                  </button>
-                  <span className="stepper-value">{editorSettings.fontSize}px</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateEditorSetting("fontSize", Math.min(24, editorSettings.fontSize + 1))
-                    }
-                    disabled={editorSettings.fontSize >= 24}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <h3>Line Numbers</h3>
-                <label className="settings-toggle">
-                  <input
-                    type="checkbox"
-                    checked={editorSettings.lineNumbers}
-                    onChange={(e) => updateEditorSetting("lineNumbers", e.target.checked)}
-                  />
-                  <span className="toggle-label">{editorSettings.lineNumbers ? "Visible" : "Hidden"}</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </>
+        <SettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          editorSettings={editorSettings}
+          onEditorSettingChange={updateEditorSetting}
+        />
       )}
     </main>
   );

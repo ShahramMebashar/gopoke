@@ -160,11 +160,11 @@ static WKWebView *FindWKWebView(NSView *root) {
         }
     } else if ([itemIdentifier isEqualToString:GoPadSettingsItemID]) {
         item.label = @"Settings";
-        item.toolTip = @"Editor Settings (⌘,)";
+        item.toolTip = @"Settings (⌘,)";
         item.tag = GoPadTagSettings;
         if (@available(macOS 11.0, *)) {
             item.image = [NSImage imageWithSystemSymbolName:@"gearshape"
-                                  accessibilityDescription:@"Editor Settings"];
+                                  accessibilityDescription:@"Settings"];
         }
     }
 
