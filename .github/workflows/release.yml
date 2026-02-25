@@ -1,0 +1,187 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  WAILS_CMD: "go run github.com/wailsapp/wails/v2/cmd/wails@v2.11.0"
+
+jobs:
+  # ── Create draft release ──────────────────────────────────────────────────
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect prerelease
+        id: meta
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "$tag" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: true
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          generate_release_notes: true
+
+  # ── Build matrix ──────────────────────────────────────────────────────────
+  build:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/arm64
+            artifact: GoPoke-macos-arm64.zip
+            label: macos-arm64
+          - os: macos-13
+            platform: darwin/amd64
+            artifact: GoPoke-macos-amd64.zip
+            label: macos-amd64
+          - os: windows-latest
+            platform: windows/amd64
+            artifact: GoPoke-windows-amd64.zip
+            label: windows-amd64
+          - os: ubuntu-latest
+            platform: linux/amd64
+            artifact: GoPoke-linux-amd64.tar.gz
+            label: linux-amd64
+
+    runs-on: ${{ matrix.os }}
+    name: build (${{ matrix.label }})
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # ── Linux dependencies ────────────────────────────────────────────────
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      # ── macOS code signing (optional) ─────────────────────────────────────
+      - name: Import macOS signing certificate
+        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build with Wails
+        working-directory: cmd/gopoke
+        run: ${{ env.WAILS_CMD }} build -clean -platform ${{ matrix.platform }} -tags wails,desktop,production
+
+      # ── macOS signing & notarization (optional) ───────────────────────────
+      - name: Sign macOS app
+        if: runner.os == 'macOS' && env.MACOS_SIGN_IDENTITY != ''
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        working-directory: cmd/gopoke
+        run: |
+          codesign --force --deep --options runtime \
+            --sign "$MACOS_SIGN_IDENTITY" \
+            build/bin/GoPoke.app
+
+      - name: Notarize macOS app
+        if: runner.os == 'macOS' && env.MACOS_NOTARY_APPLE_ID != ''
+        env:
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        working-directory: cmd/gopoke
+        run: |
+          ditto -c -k --keepParent build/bin/GoPoke.app GoPoke-notarize.zip
+          xcrun notarytool submit GoPoke-notarize.zip \
+            --apple-id "$MACOS_NOTARY_APPLE_ID" \
+            --password "$MACOS_NOTARY_PASSWORD" \
+            --team-id "$MACOS_NOTARY_TEAM_ID" \
+            --wait
+          xcrun stapler staple build/bin/GoPoke.app
+          rm GoPoke-notarize.zip
+
+      # ── Package artifacts ─────────────────────────────────────────────────
+      - name: Package macOS artifact
+        if: runner.os == 'macOS'
+        working-directory: cmd/gopoke
+        run: ditto -c -k --keepParent build/bin/GoPoke.app ${{ matrix.artifact }}
+
+      - name: Package Windows artifact
+        if: runner.os == 'Windows'
+        working-directory: cmd/gopoke
+        shell: pwsh
+        run: Compress-Archive -Path build/bin/GoPoke.exe -DestinationPath ${{ matrix.artifact }}
+
+      - name: Package Linux artifact
+        if: runner.os == 'Linux'
+        working-directory: cmd/gopoke
+        run: tar -czf ${{ matrix.artifact }} -C build/bin GoPoke
+
+      # ── Upload to release ─────────────────────────────────────────────────
+      - name: Upload artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: cmd/gopoke/${{ matrix.artifact }}
+
+  # ── Checksums ─────────────────────────────────────────────────────────────
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --dir assets
+
+      - name: Generate checksums
+        run: |
+          cd assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload checksums to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: assets/SHA256SUMS.txt
