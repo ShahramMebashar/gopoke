@@ -1,4 +1,4 @@
-# GoPad Task Tracker
+# GoPoke Task Tracker
 
 ## Status Legend
 - `TODO`: Not started.
@@ -16,7 +16,7 @@
 
 | Ticket | Status | Notes |
 |---|---|---|
-| GP-001 | DONE | Wails bridge + runtime entrypoint verified with launch probe (`go run -tags 'wails,desktop,production' ./cmd/gopad`) and app startup log observed. |
+| GP-001 | DONE | Wails bridge + runtime entrypoint verified with launch probe (`go run -tags 'wails,desktop,production' ./cmd/gopoke`) and app startup log observed. |
 | GP-002 | TODO | UI shell not implemented yet. |
 | GP-003 | DONE | Package scaffolding added under `internal/`. |
 | GP-004 | DONE | Schema v1 and storage snapshot types implemented. |
@@ -42,8 +42,8 @@
 |---|---|---|
 | GP-015 | DONE | Process-based worker manager implemented (start/reuse/stop/stop-all) with headless worker mode and lifecycle tests. |
 | GP-016 | DONE | Run execution pipeline now accepts typed run requests (`projectPath`, `packagePath`, `source`) and resolves cwd/env from selected/default project context before execution. |
-| GP-017 | DONE | Run stdout now streams incrementally from Go process to frontend via Wails events (`gopad:run:stdout-chunk`) and appends safely into output pane during active run. |
-| GP-018 | DONE | Stderr now streams incrementally over dedicated Wails event channel (`gopad:run:stderr-chunk`) and renders independently from stdout. |
+| GP-017 | DONE | Run stdout now streams incrementally from Go process to frontend via Wails events (`gopoke:run:stdout-chunk`) and appends safely into output pane during active run. |
+| GP-018 | DONE | Stderr now streams incrementally over dedicated Wails event channel (`gopoke:run:stderr-chunk`) and renders independently from stdout. |
 | GP-019 | DONE | Active-run cancel API added end-to-end (`CancelRun`), canceled runs return `Canceled=true`, and idle cancel is a no-op without error. |
 | GP-020 | DONE | `Re-run Last` action added to editor toolbar and reruns last executed snippet content with current project target/env context. |
 | GP-021 | DONE | Explicit UI run state model added (`idle/running/success/failed/canceled`) with state-driven run/rerun/cancel button gating. |
@@ -83,7 +83,7 @@
 | GP-040 | DONE | Added tagged run/cancel stress harness (`internal/stress/TestRunCancelReliabilityStress`) with reliability summary/failure log lines and report automation via `scripts/run-run-cancel-stress.sh` + CI artifact upload. |
 | GP-041 | DONE | Closed P1 defects from bug bash: warm-run cache churn (`internal/execution` stable snippet cache paths) and early-cancel error normalization (`internal/app` now returns canceled/timed-out results instead of context errors); regression tests added and closure log captured in `docs/artifacts/gp-041-bug-bash-defects.md`. |
 | GP-042 | DONE | Shipped onboarding/help docs at `docs/onboarding.md` and added in-app Help entry (`open-help` toolbar action + help card checklist/tips) reachable from UI. |
-| GP-043 | DONE | Added macOS packaging/signing pipeline with `cmd/gopad/wails.json`, `scripts/release-macos.sh`, and manual GitHub workflow `.github/workflows/release-macos.yml` producing zip/report artifacts with optional codesign/notarization env hooks. |
+| GP-043 | DONE | Added macOS packaging/signing pipeline with `cmd/gopoke/wails.json`, `scripts/release-macos.sh`, and manual GitHub workflow `.github/workflows/release-macos.yml` producing zip/report artifacts with optional codesign/notarization env hooks. |
 | GP-044 | DONE | Added release checklist `docs/release-checklist.md` and RC signoff automation `scripts/release-rc-signoff.sh` generating `artifacts/gp-044-rc-signoff.md` with gate evidence and optional tag creation flow (`RC_CREATE_TAG=1`). |
 
 ## Next Up

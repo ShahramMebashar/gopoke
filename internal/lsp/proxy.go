@@ -4,15 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -85,10 +88,10 @@ func (p *Proxy) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithCancel(r.Context())
+	_, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, p.goplsPath, "serve")
+	cmd := exec.Command(p.goplsPath, "serve")
 	cmd.Dir = p.workspaceDir
 
 	stdin, err := cmd.StdinPipe()
@@ -151,7 +154,44 @@ func (p *Proxy) handleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	wg.Wait()
-	_ = cmd.Wait()
+	gracefulStopProcess(cmd, p.logger)
+}
+
+const goplsGracePeriod = 2 * time.Second
+
+func gracefulStopProcess(cmd *exec.Cmd, logger *slog.Logger) {
+	if cmd.Process == nil {
+		return
+	}
+
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		if errors.Is(err, os.ErrProcessDone) {
+			_ = cmd.Wait()
+			return
+		}
+		logger.Debug("gopls interrupt failed, killing", "error", err)
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return
+	}
+
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+
+	timer := time.NewTimer(goplsGracePeriod)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+		logger.Debug("gopls grace period expired, killing")
+		_ = cmd.Process.Kill()
+		<-done
+	}
 }
 
 // splitContentLength is a bufio.SplitFunc for LSP Content-Length framing.

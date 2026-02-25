@@ -7,9 +7,9 @@ import (
 	"embed"
 	"log/slog"
 
-	"gopad/internal/app"
-	"gopad/internal/desktop"
-	"gopad/internal/runner"
+	"gopoke/internal/app"
+	"gopoke/internal/desktop"
+	"gopoke/internal/runner"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"

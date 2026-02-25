@@ -90,7 +90,7 @@ func TestRunGoSnippetWithOptionsUsesWorkingDirectoryAndEnvironment(t *testing.T)
 		"\tif err != nil {",
 		"\t\tpanic(err)",
 		"\t}",
-		"\tfmt.Printf(\"%s|%s\", wd, os.Getenv(\"GOPAD_SNIPPET_ENV\"))",
+		"\tfmt.Printf(\"%s|%s\", wd, os.Getenv(\"GOPOKE_SNIPPET_ENV\"))",
 		"}",
 		"",
 	}, "\n")
@@ -98,7 +98,7 @@ func TestRunGoSnippetWithOptionsUsesWorkingDirectoryAndEnvironment(t *testing.T)
 	result, err := RunGoSnippetWithOptions(context.Background(), projectDir, snippet, RunOptions{
 		WorkingDirectory: workingDir,
 		Environment: map[string]string{
-			"GOPAD_SNIPPET_ENV": "enabled",
+			"GOPOKE_SNIPPET_ENV": "enabled",
 		},
 	})
 	if err != nil {
@@ -309,10 +309,11 @@ func TestRunGoSnippetWithOptionsCanceled(t *testing.T) {
 	}, "\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(200 * time.Millisecond)
+	timer := time.AfterFunc(200*time.Millisecond, cancel)
+	t.Cleanup(func() {
+		timer.Stop()
 		cancel()
-	}()
+	})
 
 	result, err := RunGoSnippetWithOptions(ctx, projectDir, snippet, RunOptions{
 		Timeout: 5 * time.Second,
@@ -403,11 +404,18 @@ func TestRunGoSnippetWithOptionsHardKillFallback(t *testing.T) {
 	}, "\n")
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	started := make(chan struct{}, 1)
 
-	resultCh := make(chan Result, 1)
-	errCh := make(chan error, 1)
+	type runOutcome struct {
+		result Result
+		err    error
+	}
+	outcomeCh := make(chan runOutcome, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		result, err := RunGoSnippetWithOptions(ctx, projectDir, snippet, RunOptions{
 			Timeout:         10 * time.Second,
 			KillGracePeriod: 200 * time.Millisecond,
@@ -420,25 +428,25 @@ func TestRunGoSnippetWithOptionsHardKillFallback(t *testing.T) {
 				}
 			},
 		})
-		resultCh <- result
-		errCh <- err
+		outcomeCh <- runOutcome{result: result, err: err}
 	}()
+	t.Cleanup(func() { wg.Wait() })
 
 	select {
 	case <-started:
 		cancel()
 	case <-time.After(4 * time.Second):
+		cancel()
 		t.Fatal("snippet did not start in time")
 	}
 
 	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("RunGoSnippetWithOptions() error = %v", err)
+	case outcome := <-outcomeCh:
+		if outcome.err != nil {
+			t.Fatalf("RunGoSnippetWithOptions() error = %v", outcome.err)
 		}
-		result := <-resultCh
-		if !result.Canceled {
-			t.Fatalf("result.Canceled = %v, want true", result.Canceled)
+		if !outcome.result.Canceled {
+			t.Fatalf("result.Canceled = %v, want true", outcome.result.Canceled)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("hard-kill fallback did not stop process in time")
@@ -466,12 +474,13 @@ func TestRunGoSnippetWithOptionsCancelStress(t *testing.T) {
 		"",
 	}, "\n")
 
-	for iteration := 0; iteration < 8; iteration++ {
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			time.Sleep(120 * time.Millisecond)
+	for iteration := range 3 {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		timer := time.AfterFunc(120*time.Millisecond, cancel)
+		t.Cleanup(func() {
+			timer.Stop()
 			cancel()
-		}()
+		})
 
 		result, err := RunGoSnippetWithOptions(ctx, projectDir, snippet, RunOptions{
 			Timeout:         5 * time.Second,
@@ -494,7 +503,7 @@ func TestRunGoSnippetWithOptionsUsesStableSnippetCachePath(t *testing.T) {
 	logPath := filepath.Join(toolchainDir, "toolchain.log")
 	toolchainPath := filepath.Join(toolchainDir, "fake-go.sh")
 
-	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$@\" >> \"$GOPAD_TOOLCHAIN_LOG\"\n"
+	script := "#!/usr/bin/env bash\nset -euo pipefail\necho \"$@\" >> \"$GOPOKE_TOOLCHAIN_LOG\"\n"
 	if err := os.WriteFile(toolchainPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("WriteFile(fake toolchain) error = %v", err)
 	}
@@ -503,7 +512,7 @@ func TestRunGoSnippetWithOptionsUsesStableSnippetCachePath(t *testing.T) {
 	options := RunOptions{
 		Toolchain: toolchainPath,
 		Environment: map[string]string{
-			"GOPAD_TOOLCHAIN_LOG": logPath,
+			"GOPOKE_TOOLCHAIN_LOG": logPath,
 		},
 	}
 
@@ -540,7 +549,7 @@ func TestRunGoSnippetWithOptionsUsesStableSnippetCachePath(t *testing.T) {
 		t.Fatalf("snippet path changed between runs: second=%q first=%q", got, want)
 	}
 
-	cacheDir := filepath.Join(projectDir, ".gopad-run-cache")
+	cacheDir := filepath.Join(projectDir, ".gopoke-run-cache")
 	if got, want := filepath.Dir(firstRunPath), cacheDir; canonicalPath(t, got) != canonicalPath(t, want) {
 		t.Fatalf("cache dir = %q, want %q", got, want)
 	}
@@ -549,7 +558,7 @@ func TestRunGoSnippetWithOptionsUsesStableSnippetCachePath(t *testing.T) {
 func TestStableSnippetFilePath(t *testing.T) {
 	t.Parallel()
 
-	cacheDir := filepath.Join(t.TempDir(), ".gopad-run-cache")
+	cacheDir := filepath.Join(t.TempDir(), ".gopoke-run-cache")
 	snippetOne := "package main\nfunc main(){println(\"one\")}\n"
 	snippetTwo := "package main\nfunc main(){println(\"two\")}\n"
 

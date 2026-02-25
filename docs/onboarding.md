@@ -1,4 +1,4 @@
-# GoPad Onboarding and Help
+# GoPoke Onboarding and Help
 
 ## First-Run Checklist
 

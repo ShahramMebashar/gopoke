@@ -1,7 +1,7 @@
-# GoPad Sprint Backlog (MVP)
+# GoPoke Sprint Backlog (MVP)
 
 ## Document Control
-- Product: GoPad
+- Product: GoPoke
 - Scope: MVP from `docs/prd.md` and `docs/roadmap.md`
 - Last Updated: 2026-02-21
 - Sprint Cadence: 1 week

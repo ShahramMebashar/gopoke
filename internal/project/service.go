@@ -8,7 +8,7 @@ import (
 	"slices"
 	"sort"
 
-	"gopad/internal/storage"
+	"gopoke/internal/storage"
 )
 
 // Service handles project open/discovery workflows.

@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"gopad/internal/app"
-	"gopad/internal/execution"
-	"gopad/internal/lsp"
-	"gopad/internal/playground"
-	"gopad/internal/project"
-	"gopad/internal/runner"
-	"gopad/internal/storage"
+	"gopoke/internal/app"
+	"gopoke/internal/execution"
+	"gopoke/internal/lsp"
+	"gopoke/internal/playground"
+	"gopoke/internal/project"
+	"gopoke/internal/runner"
+	"gopoke/internal/storage"
 )
 
 type fakeApplication struct {

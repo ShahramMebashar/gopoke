@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var (
@@ -14,6 +15,10 @@ var (
 )
 
 const maxSourceBytes = 64 * 1024
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
 
 // ShareResult contains the playground URL after a successful share.
 type ShareResult struct {
@@ -31,7 +36,7 @@ func Share(ctx context.Context, source string) (ShareResult, error) {
 		return ShareResult{}, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return ShareResult{}, fmt.Errorf("share request: %w", err)
 	}
@@ -64,7 +69,7 @@ func Import(ctx context.Context, urlOrHash string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetch request: %w", err)
 	}

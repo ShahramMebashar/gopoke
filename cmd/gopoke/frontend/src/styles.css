@@ -64,6 +64,17 @@ body {
   padding-top: 52px;
 }
 
+.macos-drag-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 999;
+  -webkit-app-region: drag;
+  --wails-draggable: drag;
+}
+
 h1,
 h2,
 h3,

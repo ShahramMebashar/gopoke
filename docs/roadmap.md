@@ -1,7 +1,7 @@
-# GoPad MVP Roadmap
+# GoPoke MVP Roadmap
 
 ## Document Control
-- Product: GoPad
+- Product: GoPoke
 - Version: 1.0 (MVP)
 - Status: Draft
 - Last Updated: 2026-02-21

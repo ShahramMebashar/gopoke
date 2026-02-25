@@ -1,9 +1,9 @@
 .gocache/
 bin/
 dist/
-cmd/gopad/frontend/node_modules/
-cmd/gopad/frontend/.vite/
+cmd/gopoke/frontend/node_modules/
+cmd/gopoke/frontend/.vite/
 node_modules/
 artifacts/
-.gopad-lsp-workspace/
+.gopoke-lsp-workspace/
 .worktrees/

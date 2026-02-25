@@ -1,13 +1,13 @@
-# GoPad MVP PRD
+# GoPoke MVP PRD
 
 ## Document Control
-- Product: GoPad
+- Product: GoPoke
 - Version: 1.0 (MVP)
 - Status: Draft
 - Last Updated: 2026-02-21
 
 ## 1. Product Summary
-GoPad is a desktop app for running and iterating on Go snippets quickly, similar to a "Tinkerwell for Go" workflow.
+GoPoke is a desktop app for running and iterating on Go snippets quickly, similar to a "Tinkerwell for Go" workflow.
 
 The MVP prioritizes fast local execution, reliable run/cancel behavior, useful error feedback, and a lightweight snippet library.
 

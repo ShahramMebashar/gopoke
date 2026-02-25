@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"gopad/internal/app"
-	"gopad/internal/execution"
-	"gopad/internal/lsp"
-	"gopad/internal/playground"
-	"gopad/internal/project"
-	"gopad/internal/runner"
-	"gopad/internal/storage"
+	"gopoke/internal/app"
+	"gopoke/internal/execution"
+	"gopoke/internal/lsp"
+	"gopoke/internal/playground"
+	"gopoke/internal/project"
+	"gopoke/internal/runner"
+	"gopoke/internal/storage"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -23,8 +23,8 @@ import (
 // NativeToolbarUpdater is set by main to update the native toolbar run/stop state.
 var NativeToolbarUpdater func(isRunning bool)
 
-const runStdoutChunkEventName = "gopad:run:stdout-chunk"
-const runStderrChunkEventName = "gopad:run:stderr-chunk"
+const runStdoutChunkEventName = "gopoke:run:stdout-chunk"
+const runStderrChunkEventName = "gopoke:run:stderr-chunk"
 
 // RunStdoutChunkEvent contains streamed stdout payload for one run.
 type RunStdoutChunkEvent struct {

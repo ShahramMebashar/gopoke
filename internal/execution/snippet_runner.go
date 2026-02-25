@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -139,7 +138,7 @@ func RunGoSnippetWithOptions(ctx context.Context, projectPath string, snippet st
 		timeout = DefaultTimeout
 	}
 
-	cacheDir := filepath.Join(absoluteProjectPath, ".gopad-run-cache")
+	cacheDir := filepath.Join(absoluteProjectPath, ".gopoke-run-cache")
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return Result{}, fmt.Errorf("create run cache dir: %w", err)
 	}
@@ -239,15 +238,9 @@ func mergeEnvironment(base []string, overrides map[string]string) []string {
 		merged[key] = value
 	}
 
-	keys := make([]string, 0, len(merged))
-	for key := range merged {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	result := make([]string, 0, len(keys))
-	for _, key := range keys {
-		result = append(result, key+"="+merged[key])
+	result := make([]string, 0, len(merged))
+	for key, value := range merged {
+		result = append(result, key+"="+value)
 	}
 	return result
 }
@@ -317,12 +310,12 @@ func (w *limitedCaptureWriter) Write(p []byte) (int, error) {
 	}
 
 	w.mu.Lock()
-	defer w.mu.Unlock()
 
 	accepted := p
 	remaining := w.maxBytes - w.size
 	if remaining <= 0 {
 		w.truncated = true
+		w.mu.Unlock()
 		return len(p), nil
 	}
 	if len(accepted) > remaining {
@@ -330,17 +323,24 @@ func (w *limitedCaptureWriter) Write(p []byte) (int, error) {
 		w.truncated = true
 	}
 
+	var chunk string
 	if len(accepted) > 0 {
 		if _, err := w.buffer.Write(accepted); err != nil {
+			w.mu.Unlock()
 			return 0, err
 		}
 		w.size += len(accepted)
 		if w.onChunk != nil {
-			w.onChunk(string(accepted))
+			chunk = string(accepted)
 		}
 	}
 	if len(accepted) < len(p) {
 		w.truncated = true
+	}
+	w.mu.Unlock()
+
+	if chunk != "" {
+		w.onChunk(chunk)
 	}
 	return len(p), nil
 }

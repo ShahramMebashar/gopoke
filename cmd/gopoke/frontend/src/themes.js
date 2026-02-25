@@ -18,8 +18,8 @@ const themes = [
 ];
 
 const { registerFileUrl, whenReady: customThemesReady } = registerExtension({
-  name: "gopad-themes",
-  displayName: "Gopad Custom Themes",
+  name: "gopoke-themes",
+  displayName: "Gopoke Custom Themes",
   version: "1.0.0",
   engines: { vscode: "*" },
   contributes: { themes },

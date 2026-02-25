@@ -8,13 +8,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"gopad/internal/app"
-	"gopad/internal/execution"
+	"gopoke/internal/app"
+	"gopoke/internal/execution"
+	"gopoke/internal/testutil"
 )
 
 const (
@@ -22,7 +25,7 @@ const (
 	reliabilityTarget        = 0.99
 	stressRunTimeout         = 20000
 	cancelRequestDelay       = 250 * time.Millisecond
-	stressCancelWaitTimeout  = 8 * time.Second
+	stressCancelWaitTimeout  = 3 * time.Second
 	stressShutdownWaitTimout = app.DefaultShutdownTimeout
 )
 
@@ -66,17 +69,24 @@ func TestRunCancelReliabilityStress(t *testing.T) {
 		"",
 	}, "\n")
 
+	goroutinesBefore := runtime.NumGoroutine()
+
 	successes := 0
 	failures := make([]string, 0)
+	var wg sync.WaitGroup
 
 	for iteration := 1; iteration <= iterations; iteration++ {
 		t.Logf("STRESS_ITERATION start=%d/%d", iteration, iterations)
 		runID := fmt.Sprintf("stress-run-%03d", iteration)
 		outcomeCh := make(chan stressOutcome, 1)
 
+		iterCtx, iterCancel := testutil.TestRunContext(t)
+
+		wg.Add(1)
 		go func(runID string) {
+			defer wg.Done()
 			result, err := application.RunSnippet(
-				context.Background(),
+				iterCtx,
 				execution.RunRequest{
 					RunID:       runID,
 					ProjectPath: projectPath,
@@ -92,12 +102,14 @@ func TestRunCancelReliabilityStress(t *testing.T) {
 		time.Sleep(cancelRequestDelay)
 
 		if err := application.CancelRun(context.Background(), runID); err != nil {
+			iterCancel()
 			failures = append(failures, fmt.Sprintf("iteration=%d runID=%s reason=cancel_error error=%q", iteration, runID, err.Error()))
 			continue
 		}
 
 		select {
 		case outcome := <-outcomeCh:
+			iterCancel()
 			if outcome.err != nil {
 				failures = append(failures, fmt.Sprintf("iteration=%d runID=%s reason=run_error error=%q", iteration, runID, outcome.err.Error()))
 				continue
@@ -117,9 +129,13 @@ func TestRunCancelReliabilityStress(t *testing.T) {
 			}
 			successes++
 		case <-time.After(stressCancelWaitTimeout):
+			iterCancel()
 			failures = append(failures, fmt.Sprintf("iteration=%d runID=%s reason=cancel_did_not_complete_within=%s", iteration, runID, stressCancelWaitTimeout))
 		}
 	}
+
+	// Wait for all spawned goroutines before checking leak counts.
+	wg.Wait()
 
 	reliability := float64(successes) / float64(iterations)
 	t.Logf("STRESS_SUMMARY iterations=%d successes=%d failures=%d reliability=%.4f target=%.4f", iterations, successes, len(failures), reliability, reliabilityTarget)
@@ -130,17 +146,24 @@ func TestRunCancelReliabilityStress(t *testing.T) {
 	if reliability < reliabilityTarget {
 		t.Fatalf("run/cancel reliability %.4f below target %.4f (%d/%d successes)", reliability, reliabilityTarget, successes, iterations)
 	}
+
+	// Allow runtime goroutines to settle after all iterations.
+	time.Sleep(500 * time.Millisecond)
+	goroutinesAfter := runtime.NumGoroutine()
+	if delta := goroutinesAfter - goroutinesBefore; delta > 5 {
+		t.Errorf("goroutine leak detected: before=%d after=%d delta=%d", goroutinesBefore, goroutinesAfter, delta)
+	}
 }
 
 func readStressIterations(t *testing.T) int {
 	t.Helper()
-	value := strings.TrimSpace(os.Getenv("GOPAD_STRESS_ITERATIONS"))
+	value := strings.TrimSpace(os.Getenv("GOPOKE_STRESS_ITERATIONS"))
 	if value == "" {
 		return defaultStressIterations
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
-		t.Fatalf("invalid GOPAD_STRESS_ITERATIONS value %q", value)
+		t.Fatalf("invalid GOPOKE_STRESS_ITERATIONS value %q", value)
 	}
 	return parsed
 }
@@ -149,7 +172,7 @@ func createProject(t *testing.T) string {
 	t.Helper()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/gopad/stress\n\ngo 1.20\n")
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/gopoke/stress\n\ngo 1.20\n")
 	writeFile(t, filepath.Join(root, "main.go"), "package main\n\nfunc main() {}\n")
 	return root
 }

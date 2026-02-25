@@ -15,6 +15,9 @@ import (
 
 const stateFileName = "state.json"
 
+// maxRunsPerProject caps the number of run records kept per project.
+const maxRunsPerProject = 200
+
 // HealthReport describes storage readiness.
 type HealthReport struct {
 	Ready         bool
@@ -27,6 +30,7 @@ type Store struct {
 	mu      sync.RWMutex
 	rootDir string
 	path    string
+	cached  *Snapshot
 }
 
 // New creates a store rooted at the provided directory.
@@ -685,6 +689,7 @@ func (s *Store) RecordRun(ctx context.Context, record RunRecord) (RunRecord, err
 	}
 
 	snapshot.Runs = append(snapshot.Runs, record)
+	snapshot.Runs = pruneRunRecords(snapshot.Runs, record.ProjectID, maxRunsPerProject)
 	snapshot.Meta.UpdatedAt = now
 	if err := s.writeLocked(snapshot); err != nil {
 		return RunRecord{}, fmt.Errorf("persist run record: %w", err)
@@ -743,6 +748,10 @@ func (s *Store) ProjectRuns(ctx context.Context, projectID string, limit int) ([
 }
 
 func (s *Store) loadLocked() (Snapshot, error) {
+	if s.cached != nil {
+		return *s.cached, nil
+	}
+
 	raw, err := os.ReadFile(s.path)
 	if err != nil {
 		return Snapshot{}, err
@@ -755,6 +764,7 @@ func (s *Store) loadLocked() (Snapshot, error) {
 	if snapshot.SchemaVersion != SchemaVersionV1 {
 		return Snapshot{}, fmt.Errorf("unsupported schema version: %d", snapshot.SchemaVersion)
 	}
+	s.cached = &snapshot
 	return snapshot, nil
 }
 
@@ -788,6 +798,7 @@ func (s *Store) writeLocked(snapshot Snapshot) error {
 		os.Remove(tempPath)
 		return fmt.Errorf("replace state file: %w", err)
 	}
+	s.cached = &snapshot
 	return nil
 }
 
@@ -795,6 +806,51 @@ func projectExists(projects []ProjectRecord, projectID string) bool {
 	return slices.ContainsFunc(projects, func(project ProjectRecord) bool {
 		return project.ID == projectID
 	})
+}
+
+func pruneRunRecords(runs []RunRecord, projectID string, maxKeep int) []RunRecord {
+	count := 0
+	for _, r := range runs {
+		if r.ProjectID == projectID {
+			count++
+		}
+	}
+	if count <= maxKeep {
+		return runs
+	}
+
+	type indexedRun struct {
+		index int
+		run   RunRecord
+	}
+	projectRuns := make([]indexedRun, 0, count)
+	for i, r := range runs {
+		if r.ProjectID == projectID {
+			projectRuns = append(projectRuns, indexedRun{index: i, run: r})
+		}
+	}
+	slices.SortFunc(projectRuns, func(a, b indexedRun) int {
+		if a.run.StartedAt.After(b.run.StartedAt) {
+			return -1
+		}
+		if a.run.StartedAt.Before(b.run.StartedAt) {
+			return 1
+		}
+		return 0
+	})
+
+	drop := make(map[int]bool, count-maxKeep)
+	for _, ir := range projectRuns[maxKeep:] {
+		drop[ir.index] = true
+	}
+
+	result := make([]RunRecord, 0, len(runs)-(count-maxKeep))
+	for i, r := range runs {
+		if !drop[i] {
+			result = append(result, r)
+		}
+	}
+	return result
 }
 
 func snippetNameExists(snippets []SnippetRecord, projectID string, excludeID string, name string) bool {

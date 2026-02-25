@@ -61,7 +61,7 @@ if [[ "$rc_create_tag" == "1" ]]; then
   if git rev-parse "$rc_tag" >/dev/null 2>&1; then
     rc_tag_status="EXISTS"
   else
-    git tag -a "$rc_tag" -m "GoPad RC signoff"
+    git tag -a "$rc_tag" -m "GoPoke RC signoff"
     rc_tag_status="CREATED"
   fi
 fi

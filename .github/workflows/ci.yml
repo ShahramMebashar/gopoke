@@ -33,7 +33,7 @@ jobs:
 
       - name: Unit tests (excluding FR acceptance suite)
         run: |
-          packages="$(go list ./... | grep -v 'gopad/internal/acceptance$')"
+          packages="$(go list ./... | grep -v 'gopoke/internal/acceptance$')"
           go test $packages
 
       - name: FR acceptance report

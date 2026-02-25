@@ -4,9 +4,9 @@ GO ?= go
 NPM ?= npm
 GOCACHE ?= $(CURDIR)/.gocache
 
-FRONTEND_DIR := cmd/gopad/frontend
-APP_PKG := ./cmd/gopad
-APP_BIN := gopad
+FRONTEND_DIR := cmd/gopoke/frontend
+APP_PKG := ./cmd/gopoke
+APP_BIN := gopoke
 WAILS_TAGS := wails,desktop,production
 
 .DEFAULT_GOAL := help

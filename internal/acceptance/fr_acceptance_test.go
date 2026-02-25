@@ -6,15 +6,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"gopad/internal/app"
-	"gopad/internal/execution"
-	"gopad/internal/storage"
+	"gopoke/internal/app"
+	"gopoke/internal/execution"
+	"gopoke/internal/storage"
+	"gopoke/internal/testutil"
 )
 
-const acceptanceRunTimeoutMS = 180000
+const acceptanceRunTimeoutMS = 30000
 
 func TestFRAcceptanceSuite(t *testing.T) {
 	requireGoToolchain(t)
@@ -60,8 +62,10 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			t.Fatalf("UpsertProjectEnvVar() error = %v", err)
 		}
 
+		runCtx, runCancel := testutil.TestRunContext(t)
+		defer runCancel()
 		result, err := application.RunSnippet(
-			context.Background(),
+			runCtx,
 			execution.RunRequest{
 				ProjectPath: moduleProject,
 				PackagePath: "./cmd/api",
@@ -122,9 +126,15 @@ func TestFRAcceptanceSuite(t *testing.T) {
 		}
 		outcomeCh := make(chan outcome, 1)
 
+		runCtx, runCancel := testutil.TestRunContext(t)
+		defer runCancel()
+
+		var wg sync.WaitGroup
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			result, err := application.RunSnippet(
-				context.Background(),
+				runCtx,
 				execution.RunRequest{
 					RunID:       runID,
 					ProjectPath: moduleProject,
@@ -157,10 +167,11 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			)
 			outcomeCh <- outcome{result: result, err: err}
 		}()
+		t.Cleanup(func() { wg.Wait() })
 
 		select {
 		case <-started:
-		case <-time.After(45 * time.Second):
+		case <-time.After(15 * time.Second):
 			t.Fatal("run did not start in time")
 		}
 
@@ -176,12 +187,14 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			if !finished.result.Canceled {
 				t.Fatalf("finished.result.Canceled = %v, want true", finished.result.Canceled)
 			}
-		case <-time.After(acceptanceRunTimeoutMS * time.Millisecond):
+		case <-time.After(10 * time.Second):
 			t.Fatal("canceled run did not complete in time")
 		}
 
+		rerunCtx, rerunCancel := testutil.TestRunContext(t)
+		defer rerunCancel()
 		rerunResult, err := application.RunSnippet(
-			context.Background(),
+			rerunCtx,
 			execution.RunRequest{
 				ProjectPath: moduleProject,
 				Source:      "package main\nimport \"fmt\"\nfunc main(){fmt.Print(\"rerun-ok\")}\n",
@@ -206,8 +219,10 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			t.Fatalf("OpenProject() error = %v", err)
 		}
 
+		runCtx, runCancel := testutil.TestRunContext(t)
+		defer runCancel()
 		result, err := application.RunSnippet(
-			context.Background(),
+			runCtx,
 			execution.RunRequest{
 				ProjectPath: moduleProject,
 				TimeoutMS:   acceptanceRunTimeoutMS,
@@ -251,8 +266,10 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			t.Fatalf("OpenProject() error = %v", err)
 		}
 
+		runCtx, runCancel := testutil.TestRunContext(t)
+		defer runCancel()
 		compileResult, err := application.RunSnippet(
-			context.Background(),
+			runCtx,
 			execution.RunRequest{
 				ProjectPath: moduleProject,
 				Source:      "package main\nfunc main(){missingSymbol()}\n",
@@ -271,8 +288,10 @@ func TestFRAcceptanceSuite(t *testing.T) {
 			t.Fatalf("compile diagnostics missing: %#v", compileResult.Diagnostics)
 		}
 
+		panicCtx, panicCancel := testutil.TestRunContext(t)
+		defer panicCancel()
 		panicResult, err := application.RunSnippet(
-			context.Background(),
+			panicCtx,
 			execution.RunRequest{
 				ProjectPath: moduleProject,
 				TimeoutMS:   acceptanceRunTimeoutMS,
@@ -460,7 +479,7 @@ func createProject(t *testing.T, withModule bool) string {
 
 	root := t.TempDir()
 	if withModule {
-		writeFile(t, filepath.Join(root, "go.mod"), "module example.com/gopad/acceptance\n\ngo 1.20\n")
+		writeFile(t, filepath.Join(root, "go.mod"), "module example.com/gopoke/acceptance\n\ngo 1.20\n")
 	}
 	writeFile(t, filepath.Join(root, "main.go"), "package main\n\nfunc main() {}\n")
 	writeFile(t, filepath.Join(root, "cmd", "api", "main.go"), "package main\n\nfunc main() {}\n")

@@ -5,9 +5,9 @@ import (
 	"strings"
 )
 
-const markerPrefix = "//gopad:"
+const markerPrefix = "//gopoke:"
 
-// Parse scans stdout line-by-line for //gopad:<type> <json> markers.
+// Parse scans stdout line-by-line for //gopoke:<type> <json> markers.
 // It returns clean stdout (markers stripped) and extracted rich blocks.
 // Malformed markers (bad JSON or missing payload) are kept in clean output.
 func Parse(stdout string) (cleanStdout string, blocks []RichBlock) {

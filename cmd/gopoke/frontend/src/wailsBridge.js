@@ -98,12 +98,12 @@ export function onRunStdoutChunk(callback) {
     return () => {};
   }
 
-  const cancel = runtime.EventsOn("gopad:run:stdout-chunk", callback);
+  const cancel = runtime.EventsOn("gopoke:run:stdout-chunk", callback);
   if (typeof cancel === "function") {
     return cancel;
   }
   if (typeof runtime.EventsOff === "function") {
-    return () => runtime.EventsOff("gopad:run:stdout-chunk");
+    return () => runtime.EventsOff("gopoke:run:stdout-chunk");
   }
   return () => {};
 }
@@ -114,12 +114,12 @@ export function onRunStderrChunk(callback) {
     return () => {};
   }
 
-  const cancel = runtime.EventsOn("gopad:run:stderr-chunk", callback);
+  const cancel = runtime.EventsOn("gopoke:run:stderr-chunk", callback);
   if (typeof cancel === "function") {
     return cancel;
   }
   if (typeof runtime.EventsOff === "function") {
-    return () => runtime.EventsOff("gopad:run:stderr-chunk");
+    return () => runtime.EventsOff("gopoke:run:stderr-chunk");
   }
   return () => {};
 }

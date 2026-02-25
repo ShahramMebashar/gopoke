@@ -33,7 +33,7 @@ func TestWorkspaceCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read go.mod error = %v", err)
 	}
-	if !strings.Contains(string(goMod), "module gopad-snippet") {
+	if !strings.Contains(string(goMod), "module gopoke-snippet") {
 		t.Fatalf("go.mod missing module declaration, got: %s", goMod)
 	}
 	if !strings.Contains(string(goMod), "go 1.22") {
@@ -100,7 +100,7 @@ func TestWorkspaceCreateNoGoMod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read go.mod error = %v", err)
 	}
-	if !strings.Contains(string(goMod), "module gopad-snippet") {
+	if !strings.Contains(string(goMod), "module gopoke-snippet") {
 		t.Fatalf("go.mod missing module, got: %s", goMod)
 	}
 }

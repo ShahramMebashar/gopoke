@@ -51,6 +51,20 @@ const icons = {
       <polyline points="12.5 2.5 12.5 6.5 8.5 6.5" />
     </svg>
   ),
+  share: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 10V2.5" />
+      <polyline points="5 5 8 2 11 5" />
+      <path d="M3.5 9v4a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V9" />
+    </svg>
+  ),
+  import: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 2v7.5" />
+      <polyline points="5 7 8 10 11 7" />
+      <path d="M3.5 11v2a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-2" />
+    </svg>
+  ),
   settings: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="8" cy="8" r="2" />
@@ -112,6 +126,22 @@ export default function Toolbar({ runState, onAction }) {
           title={isRunning ? "Stop" : "Run"}
         >
           {isRunning ? icons.stop : icons.play}
+        </button>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => onAction("share")}
+          title="Share to Playground"
+        >
+          {icons.share}
+        </button>
+        <button
+          type="button"
+          className="toolbar-btn"
+          onClick={() => onAction("import")}
+          title="Import from Playground"
+        >
+          {icons.import}
         </button>
       </div>
       <div className="toolbar-spacer" />

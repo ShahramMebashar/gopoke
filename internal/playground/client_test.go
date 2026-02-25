@@ -9,8 +9,6 @@ import (
 )
 
 func TestShare(t *testing.T) {
-	t.Parallel()
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST, got %s", r.Method)
@@ -37,8 +35,6 @@ func TestShare(t *testing.T) {
 }
 
 func TestImport(t *testing.T) {
-	t.Parallel()
-
 	want := "package main\n\nfunc main() {}\n"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -104,8 +100,6 @@ func TestShareSizeLimit(t *testing.T) {
 }
 
 func TestImportNotFound(t *testing.T) {
-	t.Parallel()
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))

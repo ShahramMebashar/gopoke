@@ -14,7 +14,7 @@ type workspace struct {
 }
 
 func createWorkspace(projectPath string) (*workspace, error) {
-	wsDir := filepath.Join(projectPath, ".gopad-lsp-workspace")
+	wsDir := filepath.Join(projectPath, ".gopoke-lsp-workspace")
 	if err := os.MkdirAll(wsDir, 0o700); err != nil {
 		return nil, fmt.Errorf("create workspace dir: %w", err)
 	}
@@ -24,7 +24,7 @@ func createWorkspace(projectPath string) (*workspace, error) {
 		goVersion = "1.22"
 	}
 
-	goModContent := fmt.Sprintf("module gopad-snippet\n\ngo %s\n", goVersion)
+	goModContent := fmt.Sprintf("module gopoke-snippet\n\ngo %s\n", goVersion)
 
 	if err := os.WriteFile(filepath.Join(wsDir, "go.mod"), []byte(goModContent), 0o644); err != nil {
 		return nil, fmt.Errorf("write workspace go.mod: %w", err)

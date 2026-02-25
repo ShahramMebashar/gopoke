@@ -134,8 +134,9 @@ func (m *Manager) StopWorker(ctx context.Context, projectPath string) error {
 
 	m.mu.RLock()
 	worker, ok := m.workers[normalizedProjectPath]
+	running := ok && worker.info.Running
 	m.mu.RUnlock()
-	if !ok || !worker.info.Running {
+	if !running {
 		return nil
 	}
 
@@ -193,6 +194,7 @@ func (m *Manager) waitForWorkerExit(projectPath string, worker *managedWorker) {
 	if current, ok := m.workers[projectPath]; ok && current == worker {
 		current.info.Running = false
 		current.waitErr = waitErr
+		delete(m.workers, projectPath)
 	}
 	m.mu.Unlock()
 	close(worker.done)
@@ -248,8 +250,8 @@ func defaultWorkerCommandFactory(projectPath string) (*exec.Cmd, error) {
 	command := exec.Command(executablePath)
 	command.Env = append(
 		os.Environ(),
-		"GOPAD_WORKER_MODE=1",
-		"GOPAD_WORKER_PROJECT="+projectPath,
+		"GOPOKE_WORKER_MODE=1",
+		"GOPOKE_WORKER_PROJECT="+projectPath,
 	)
 	return command, nil
 }

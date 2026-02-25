@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	workerModeEnv    = "GOPAD_WORKER_MODE"
-	workerProjectEnv = "GOPAD_WORKER_PROJECT"
+	workerModeEnv    = "GOPOKE_WORKER_MODE"
+	workerProjectEnv = "GOPOKE_WORKER_PROJECT"
 )
 
 // IsWorkerMode reports whether this process should act as a worker host.

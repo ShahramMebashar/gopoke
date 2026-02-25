@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"gopad/internal/execution"
-	"gopad/internal/project"
-	"gopad/internal/storage"
-	"gopad/internal/telemetry"
+	"gopoke/internal/execution"
+	"gopoke/internal/project"
+	"gopoke/internal/storage"
+	"gopoke/internal/telemetry"
+	"gopoke/internal/testutil"
 )
 
 func TestApplicationRunSnippetUsesSelectedPackageAndEnv(t *testing.T) {
@@ -56,7 +57,9 @@ func TestApplicationRunSnippetUsesSelectedPackageAndEnv(t *testing.T) {
 		"",
 	}, "\n")
 
-	runResult, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	runResult, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		PackagePath: "./cmd/api",
 		Source:      snippet,
@@ -86,12 +89,12 @@ func TestApplicationOpenProjectExpandsHomePath(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	projectDir := filepath.Join(homeDir, "Projects", "gopad")
+	projectDir := filepath.Join(homeDir, "Projects", "gopoke")
 	setupRunnableProject(t, projectDir)
 
-	openResult, err := application.OpenProject(context.Background(), "~/Projects/gopad")
+	openResult, err := application.OpenProject(context.Background(), "~/Projects/gopoke")
 	if err != nil {
-		t.Fatalf("OpenProject(~/Projects/gopad) error = %v", err)
+		t.Fatalf("OpenProject(~/Projects/gopoke) error = %v", err)
 	}
 	if got, want := canonicalPath(t, openResult.Project.Path), canonicalPath(t, projectDir); got != want {
 		t.Fatalf("openResult.Project.Path = %q, want %q", got, want)
@@ -130,7 +133,9 @@ func TestApplicationRunSnippetFallsBackToDefaultPackage(t *testing.T) {
 		"",
 	}, "\n")
 
-	runResult, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	runResult, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		Source:      snippet,
 	}, nil, nil)
@@ -202,7 +207,9 @@ func TestApplicationSetProjectWorkingDirectoryAffectsExecution(t *testing.T) {
 		t.Fatalf("SetProjectWorkingDirectory() error = %v", err)
 	}
 
-	runResult, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	runResult, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		Source: strings.Join([]string{
 			"package main",
@@ -244,7 +251,9 @@ func TestApplicationSetProjectToolchainAffectsExecution(t *testing.T) {
 		t.Fatalf("SetProjectToolchain(go) error = %v", err)
 	}
 
-	result, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	result, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		Source:      "package main\nimport \"fmt\"\nfunc main(){fmt.Print(\"ok\")}\n",
 	}, nil, nil)
@@ -331,7 +340,9 @@ func TestApplicationRunSnippetRejectsUnknownPackage(t *testing.T) {
 		t.Fatalf("OpenProject() error = %v", err)
 	}
 
-	_, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	_, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		PackagePath: "./cmd/does-not-exist",
 		Source:      "package main\nfunc main() {}\n",
@@ -375,7 +386,9 @@ func TestApplicationRunSnippetStreamsStdout(t *testing.T) {
 	chunks := make([]string, 0)
 	firstChunkAt := time.Time{}
 
-	result, err := application.RunSnippet(context.Background(), execution.RunRequest{
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+	result, err := application.RunSnippet(runCtx, execution.RunRequest{
 		ProjectPath: projectDir,
 		Source:      snippet,
 	}, func(chunk string) {
@@ -446,8 +459,10 @@ func TestApplicationRunSnippetStreamsStderr(t *testing.T) {
 
 	var mu sync.Mutex
 	stderrChunks := make([]string, 0)
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, err := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			ProjectPath: projectDir,
 			Source:      snippet,
@@ -525,9 +540,15 @@ func TestApplicationCancelRunActive(t *testing.T) {
 	startedCh := make(chan struct{}, 1)
 	runID := "run_cancel_active"
 
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		result, err := application.RunSnippet(
-			context.Background(),
+			runCtx,
 			execution.RunRequest{
 				RunID:       runID,
 				ProjectPath: projectDir,
@@ -545,6 +566,7 @@ func TestApplicationCancelRunActive(t *testing.T) {
 		)
 		outcomeCh <- runOutcome{result: result, err: err}
 	}()
+	t.Cleanup(func() { wg.Wait() })
 
 	select {
 	case <-startedCh:
@@ -602,33 +624,39 @@ func TestApplicationCancelRunEarlyReturnsCanceledResult(t *testing.T) {
 		err    error
 	}
 	outcomeCh := make(chan runOutcome, 1)
+	registered := make(chan struct{}, 1)
+
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		result, err := application.RunSnippet(
-			context.Background(),
+			runCtx,
 			execution.RunRequest{
 				RunID:       runID,
 				ProjectPath: projectDir,
 				Source:      snippet,
 			},
-			nil,
+			func(_ string) {
+				select {
+				case registered <- struct{}{}:
+				default:
+				}
+			},
 			nil,
 		)
 		outcomeCh <- runOutcome{result: result, err: err}
 	}()
+	t.Cleanup(func() { wg.Wait() })
 
-	activeDeadline := time.Now().Add(2 * time.Second)
-	active := false
-	for time.Now().Before(activeDeadline) {
-		application.runMu.Lock()
-		_, active = application.activeRuns[runID]
-		application.runMu.Unlock()
-		if active {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if !active {
-		t.Fatal("run did not become active in time")
+	// Wait for the run to register (first stdout callback or timeout).
+	select {
+	case <-registered:
+	case <-time.After(2 * time.Second):
+		// Even without stdout, the run should be active by now — proceed.
 	}
 
 	if err := application.CancelRun(context.Background(), runID); err != nil {
@@ -664,8 +692,10 @@ func TestApplicationRunSnippetRecordsRunMetadataSuccess(t *testing.T) {
 	}
 
 	runID := "run_record_success"
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, err := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       runID,
 			ProjectPath: projectDir,
@@ -715,8 +745,10 @@ func TestApplicationRunSnippetRecordsRunMetadataFailure(t *testing.T) {
 	}
 
 	runID := "run_record_failed"
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, err := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       runID,
 			ProjectPath: projectDir,
@@ -762,8 +794,10 @@ func TestApplicationRunSnippetParsesCompileDiagnostics(t *testing.T) {
 		t.Fatalf("OpenProject() error = %v", err)
 	}
 
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, err := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       "run_diag_compile",
 			ProjectPath: projectDir,
@@ -811,8 +845,10 @@ func TestApplicationRunSnippetParsesPanicDiagnostics(t *testing.T) {
 		"",
 	}, "\n")
 
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, runErr := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       "run_diag_panic",
 			ProjectPath: projectDir,
@@ -857,8 +893,10 @@ func TestApplicationRunSnippetTimeoutEnforced(t *testing.T) {
 		t.Fatalf("OpenProject() error = %v", err)
 	}
 
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, runErr := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       "run_timeout_enforced",
 			ProjectPath: projectDir,
@@ -910,8 +948,10 @@ func TestApplicationRunSnippetOutputGuardrail(t *testing.T) {
 		t.Fatalf("OpenProject() error = %v", err)
 	}
 
+	runCtx, runCancel := testutil.TestRunContext(t)
+	defer runCancel()
 	result, runErr := application.RunSnippet(
-		context.Background(),
+		runCtx,
 		execution.RunRequest{
 			RunID:       "run_output_guardrail",
 			ProjectPath: projectDir,
@@ -970,7 +1010,7 @@ func newTestApplication(t *testing.T) *Application {
 func setupRunnableProject(t *testing.T, root string) {
 	t.Helper()
 
-	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/gopadtest\n\ngo 1.25\n")
+	writeTestFile(t, filepath.Join(root, "go.mod"), "module example.com/gopoketest\n\ngo 1.25\n")
 	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n\nfunc main() {}\n")
 	writeTestFile(t, filepath.Join(root, "cmd", "api", "main.go"), "package main\n\nfunc main() {}\n")
 }

@@ -9,8 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gopad/internal/app"
-	"gopad/internal/runner"
+	"gopoke/internal/app"
+	"gopoke/internal/runner"
 )
 
 func main() {

@@ -1,4 +1,4 @@
-# GoPad UI / UX / Performance Review
+# GoPoke UI / UX / Performance Review
 
 ## UI
 

@@ -1,4 +1,4 @@
-// nstoolbar_darwin.m — Native NSToolbar with SF Symbols for GoPad (macOS only).
+// nstoolbar_darwin.m — Native NSToolbar with SF Symbols for GoPoke (macOS only).
 // Built as part of the CGo compilation unit; linked via nstoolbar_darwin.go.
 
 #import <Cocoa/Cocoa.h>
@@ -6,14 +6,16 @@
 
 // ── Toolbar item identifiers ────────────────────────────────────────────────
 
-static NSToolbarItemIdentifier const GoPadSidebarItemID   = @"com.gopad.sidebar";
-static NSToolbarItemIdentifier const GoPadOpenItemID      = @"com.gopad.open";
-static NSToolbarItemIdentifier const GoPadOpenFileItemID  = @"com.gopad.openFile";
-static NSToolbarItemIdentifier const GoPadNewItemID       = @"com.gopad.new";
-static NSToolbarItemIdentifier const GoPadFormatItemID    = @"com.gopad.format";
-static NSToolbarItemIdentifier const GoPadRunItemID       = @"com.gopad.run";
-static NSToolbarItemIdentifier const GoPadRerunItemID     = @"com.gopad.rerun";
-static NSToolbarItemIdentifier const GoPadSettingsItemID  = @"com.gopad.settings";
+static NSToolbarItemIdentifier const GoPadSidebarItemID   = @"com.gopoke.sidebar";
+static NSToolbarItemIdentifier const GoPadOpenItemID      = @"com.gopoke.open";
+static NSToolbarItemIdentifier const GoPadOpenFileItemID  = @"com.gopoke.openFile";
+static NSToolbarItemIdentifier const GoPadNewItemID       = @"com.gopoke.new";
+static NSToolbarItemIdentifier const GoPadFormatItemID    = @"com.gopoke.format";
+static NSToolbarItemIdentifier const GoPadRunItemID       = @"com.gopoke.run";
+static NSToolbarItemIdentifier const GoPadRerunItemID     = @"com.gopoke.rerun";
+static NSToolbarItemIdentifier const GoPadShareItemID     = @"com.gopoke.share";
+static NSToolbarItemIdentifier const GoPadImportItemID    = @"com.gopoke.import";
+static NSToolbarItemIdentifier const GoPadSettingsItemID  = @"com.gopoke.settings";
 
 // Tags for identification when updating state.
 enum {
@@ -25,6 +27,8 @@ enum {
     GoPadTagRun      = 5,
     GoPadTagRerun    = 6,
     GoPadTagSettings = 7,
+    GoPadTagShare    = 9,
+    GoPadTagImport   = 10,
 };
 
 // ── WKWebView finder ────────────────────────────────────────────────────────
@@ -57,6 +61,8 @@ static WKWebView *FindWKWebView(NSView *root) {
         case GoPadTagFormat:  action = @"format";         break;
         case GoPadTagRun:     action = @"run";            break;
         case GoPadTagRerun:    action = @"rerun";          break;
+        case GoPadTagShare:    action = @"share";           break;
+        case GoPadTagImport:   action = @"import";          break;
         case GoPadTagSettings: action = @"settings";       break;
         default: return;
     }
@@ -68,7 +74,7 @@ static WKWebView *FindWKWebView(NSView *root) {
     if (!webView) return;
 
     NSString *js = [NSString stringWithFormat:
-        @"if(window.__gopadToolbarAction){window.__gopadToolbarAction('%@')}", action];
+        @"if(window.__gopokeToolbarAction){window.__gopokeToolbarAction('%@')}", action];
     [webView evaluateJavaScript:js completionHandler:nil];
 }
 
@@ -136,6 +142,22 @@ static WKWebView *FindWKWebView(NSView *root) {
             item.image = [NSImage imageWithSystemSymbolName:@"arrow.clockwise"
                                   accessibilityDescription:@"Re-run Last"];
         }
+    } else if ([itemIdentifier isEqualToString:GoPadShareItemID]) {
+        item.label = @"Share";
+        item.toolTip = @"Share to Go Playground";
+        item.tag = GoPadTagShare;
+        if (@available(macOS 11.0, *)) {
+            item.image = [NSImage imageWithSystemSymbolName:@"square.and.arrow.up"
+                                  accessibilityDescription:@"Share to Playground"];
+        }
+    } else if ([itemIdentifier isEqualToString:GoPadImportItemID]) {
+        item.label = @"Import";
+        item.toolTip = @"Import from Go Playground";
+        item.tag = GoPadTagImport;
+        if (@available(macOS 11.0, *)) {
+            item.image = [NSImage imageWithSystemSymbolName:@"square.and.arrow.down"
+                                  accessibilityDescription:@"Import from Playground"];
+        }
     } else if ([itemIdentifier isEqualToString:GoPadSettingsItemID]) {
         item.label = @"Settings";
         item.toolTip = @"Editor Settings (⌘,)";
@@ -157,6 +179,8 @@ static WKWebView *FindWKWebView(NSView *root) {
         GoPadNewItemID,
         GoPadFormatItemID,
         GoPadRunItemID,
+        GoPadShareItemID,
+        GoPadImportItemID,
         GoPadRerunItemID,
         GoPadSettingsItemID,
         NSToolbarFlexibleSpaceItemIdentifier,
@@ -171,6 +195,8 @@ static WKWebView *FindWKWebView(NSView *root) {
         GoPadNewItemID,
         GoPadFormatItemID,
         GoPadRunItemID,
+        GoPadShareItemID,
+        GoPadImportItemID,
         NSToolbarFlexibleSpaceItemIdentifier,
         GoPadRerunItemID,
         GoPadSettingsItemID,
@@ -199,7 +225,7 @@ void SetupNativeToolbar(void) {
 
         _sharedDelegate = [[GoPadToolbarDelegate alloc] init];
 
-        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"com.gopad.toolbar"];
+        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"com.gopoke.toolbar"];
         toolbar.delegate = _sharedDelegate;
         toolbar.displayMode = NSToolbarDisplayModeIconOnly;
         toolbar.allowsUserCustomization = NO;

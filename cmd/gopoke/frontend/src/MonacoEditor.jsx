@@ -24,7 +24,7 @@ function buildConfigJson(theme, fontSize, fontFamily, lineNumbers) {
 
 const allExtensionsReady = Promise.allSettled([allThemesReady, goExtensionReady()]);
 
-export default function GopadMonacoEditor({
+export default function GopokeMonacoEditor({
   code,
   onCodeChange,
   wsPort,

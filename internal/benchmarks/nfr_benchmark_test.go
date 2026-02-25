@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"gopad/internal/app"
-	"gopad/internal/execution"
+	"gopoke/internal/app"
+	"gopoke/internal/execution"
+	"gopoke/internal/testutil"
 )
 
-const nfrBenchmarkRunTimeoutMS = 120000
+const nfrBenchmarkRunTimeoutMS = 30000
 
 func BenchmarkNFRStartupLatency(b *testing.B) {
 	baseDataRoot := b.TempDir()
@@ -81,8 +82,10 @@ func BenchmarkNFRFirstFeedbackLatency(b *testing.B) {
 	defer stop()
 
 	snippet := "package main\n\nimport \"fmt\"\n\nfunc main(){fmt.Print(\"feedback\")}\n"
+	warmupCtx, warmupCancel := testutil.TestRunContext(b)
+	defer warmupCancel()
 	if _, err := application.RunSnippet(
-		context.Background(),
+		warmupCtx,
 		execution.RunRequest{
 			ProjectPath: projectPath,
 			TimeoutMS:   nfrBenchmarkRunTimeoutMS,
@@ -102,8 +105,9 @@ func BenchmarkNFRFirstFeedbackLatency(b *testing.B) {
 		firstFeedbackAt := time.Time{}
 		var firstFeedbackOnce sync.Once
 
+		iterCtx, iterCancel := testutil.TestRunContext(b)
 		result, err := application.RunSnippet(
-			context.Background(),
+			iterCtx,
 			execution.RunRequest{
 				RunID:       fmt.Sprintf("nfr-first-feedback-%d", i),
 				ProjectPath: projectPath,
@@ -137,6 +141,7 @@ func BenchmarkNFRFirstFeedbackLatency(b *testing.B) {
 			firstFeedbackAt = time.Now()
 		}
 		totalFirstFeedback += firstFeedbackAt.Sub(startedAt)
+		iterCancel()
 	}
 	b.StopTimer()
 
@@ -152,7 +157,7 @@ func setupBenchmarkApplication(b *testing.B) (*app.Application, string, func()) 
 	dataRoot := filepath.Join(suiteRoot, "app-data")
 	projectPath := filepath.Join(suiteRoot, "project")
 
-	writeFile(b, filepath.Join(projectPath, "go.mod"), "module example.com/gopad/bench\n\ngo 1.20\n")
+	writeFile(b, filepath.Join(projectPath, "go.mod"), "module example.com/gopoke/bench\n\ngo 1.20\n")
 	writeFile(b, filepath.Join(projectPath, "main.go"), "package main\n\nfunc main() {}\n")
 
 	application := app.NewWithDataRoot(dataRoot)

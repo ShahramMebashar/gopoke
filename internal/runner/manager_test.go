@@ -11,7 +11,7 @@ import (
 )
 
 func TestHelperWorkerProcess(t *testing.T) {
-	if os.Getenv("GOPAD_TEST_HELPER_WORKER") != "1" {
+	if os.Getenv("GOPOKE_TEST_HELPER_WORKER") != "1" {
 		return
 	}
 
@@ -89,6 +89,6 @@ func TestManagerStopAll(t *testing.T) {
 func testCommandFactory(projectPath string) (*exec.Cmd, error) {
 	_ = projectPath
 	command := exec.Command(os.Args[0], "-test.run=TestHelperWorkerProcess", "--")
-	command.Env = append(os.Environ(), "GOPAD_TEST_HELPER_WORKER=1")
+	command.Env = append(os.Environ(), "GOPOKE_TEST_HELPER_WORKER=1")
 	return command, nil
 }

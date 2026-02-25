@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gopad/internal/storage"
+	"gopoke/internal/storage"
 )
 
 func TestServiceOpenAndRecent(t *testing.T) {

@@ -13,16 +13,16 @@ import (
 	"sync"
 	"time"
 
-	"gopad/internal/diagnostics"
-	"gopad/internal/execution"
-	"gopad/internal/formatting"
-	"gopad/internal/lsp"
-	"gopad/internal/playground"
-	"gopad/internal/project"
-	"gopad/internal/richoutput"
-	"gopad/internal/runner"
-	"gopad/internal/storage"
-	"gopad/internal/telemetry"
+	"gopoke/internal/diagnostics"
+	"gopoke/internal/execution"
+	"gopoke/internal/formatting"
+	"gopoke/internal/lsp"
+	"gopoke/internal/playground"
+	"gopoke/internal/project"
+	"gopoke/internal/richoutput"
+	"gopoke/internal/runner"
+	"gopoke/internal/storage"
+	"gopoke/internal/telemetry"
 )
 
 // DefaultShutdownTimeout controls graceful shutdown time for the app.
@@ -91,11 +91,11 @@ func (a *Application) Start(ctx context.Context) error {
 	}
 
 	// Create scratch workspace for projectless mode
-	scratchDir := filepath.Join(os.TempDir(), fmt.Sprintf("gopad-scratch-%d", os.Getpid()))
+	scratchDir := filepath.Join(os.TempDir(), fmt.Sprintf("gopoke-scratch-%d", os.Getpid()))
 	if err := os.MkdirAll(scratchDir, 0o700); err != nil {
 		return fmt.Errorf("create scratch workspace: %w", err)
 	}
-	goModContent := "module gopad-scratch\n\ngo 1.22\n"
+	goModContent := "module gopoke-scratch\n\ngo 1.22\n"
 	if err := os.WriteFile(filepath.Join(scratchDir, "go.mod"), []byte(goModContent), 0o644); err != nil {
 		return fmt.Errorf("write scratch go.mod: %w", err)
 	}
@@ -901,9 +901,9 @@ func resolveProjectWorkingDirectory(projectPath string, workingDirectory string)
 func defaultDataRoot() string {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return ".gopad"
+		return ".gopoke"
 	}
-	return filepath.Join(configDir, "gopad")
+	return filepath.Join(configDir, "gopoke")
 }
 
 func generateRunID() string {

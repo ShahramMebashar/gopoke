@@ -1,4 +1,4 @@
-# GoPad MVP Release Checklist
+# GoPoke MVP Release Checklist
 
 ## Quality Gates
 

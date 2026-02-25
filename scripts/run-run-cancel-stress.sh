@@ -9,12 +9,12 @@ log_file="$out_dir/gp-040-run-cancel-stress.log"
 report_file="$out_dir/gp-040-run-cancel-stress-report.md"
 
 timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-iterations="${GOPAD_STRESS_ITERATIONS:-24}"
+iterations="${GOPOKE_STRESS_ITERATIONS:-24}"
 
 cd "$repo_root"
 
 suite_status="PASSED"
-if GOPAD_STRESS_ITERATIONS="$iterations" go test -tags stress -run TestRunCancelReliabilityStress -v ./internal/stress >"$log_file" 2>&1; then
+if GOPOKE_STRESS_ITERATIONS="$iterations" go test -tags stress -run TestRunCancelReliabilityStress -v ./internal/stress >"$log_file" 2>&1; then
   suite_status="PASSED"
 else
   suite_status="FAILED"
@@ -59,7 +59,7 @@ cat >"$report_file" <<EOF_REPORT
 
 - Generated At (UTC): $timestamp
 - Suite: \`go test -tags stress -run TestRunCancelReliabilityStress -v ./internal/stress\`
-- Config: \`GOPAD_STRESS_ITERATIONS=$iterations\`
+- Config: \`GOPOKE_STRESS_ITERATIONS=$iterations\`
 - Result: **$suite_status**
 
 | Metric | Value |

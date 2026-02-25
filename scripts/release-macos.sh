@@ -2,11 +2,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-app_root="$repo_root/cmd/gopad"
+app_root="$repo_root/cmd/gopoke"
 artifact_dir="${ARTIFACT_DIR:-$repo_root/artifacts/release}"
 mkdir -p "$artifact_dir"
 
-app_name="${APP_NAME:-GoPad}"
+app_name="${APP_NAME:-GoPoke}"
 platform="${TARGET_PLATFORM:-darwin/arm64}"
 build_tags="${BUILD_TAGS:-wails,desktop,production}"
 wails_cli="${WAILS_CLI:-go run github.com/wailsapp/wails/v2/cmd/wails@v2.11.0}"

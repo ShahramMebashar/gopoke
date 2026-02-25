@@ -1,4 +1,4 @@
-module gopad
+module gopoke
 
 go 1.25
 

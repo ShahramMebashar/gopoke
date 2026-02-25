@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import GopadMonacoEditor from "./MonacoEditor";
+import GopokeMonacoEditor from "./MonacoEditor";
 import RichOutput from "./renderers/RichOutput";
 import Toolbar from "./Toolbar";
 import {
@@ -66,14 +66,14 @@ const defaultEditorSettings = {
 
 function loadEditorSettings() {
   try {
-    const raw = localStorage.getItem("gopad:editor-settings");
+    const raw = localStorage.getItem("gopoke:editor-settings");
     if (raw) return { ...defaultEditorSettings, ...JSON.parse(raw) };
   } catch {}
   return defaultEditorSettings;
 }
 
 function saveEditorSettings(settings) {
-  localStorage.setItem("gopad:editor-settings", JSON.stringify(settings));
+  localStorage.setItem("gopoke:editor-settings", JSON.stringify(settings));
 }
 
 const defaultSnippet = [
@@ -83,8 +83,8 @@ const defaultSnippet = [
   "",
   "func main() {",
   '\tfmt.Println("Starting report...")',
-  '\tfmt.Println(`//gopad:table [{"endpoint":"/api/users","latency_ms":12},{"endpoint":"/api/orders","latency_ms":45}]`)',
-  '\tfmt.Println(`//gopad:json {"total_requests":1520,"avg_latency_ms":28.5,"status":"healthy"}`)',
+  '\tfmt.Println(`//gopoke:table [{"endpoint":"/api/users","latency_ms":12},{"endpoint":"/api/orders","latency_ms":45}]`)',
+  '\tfmt.Println(`//gopoke:json {"total_requests":1520,"avg_latency_ms":28.5,"status":"healthy"}`)',
   '\tfmt.Println("Done.")',
   "}",
 ].join("\n");
@@ -1335,12 +1335,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.__gopadToolbarAction = (action) => {
+    window.__gopokeToolbarAction = (action) => {
       const handler = toolbarHandlers.current[action];
       if (handler) handler();
     };
     return () => {
-      delete window.__gopadToolbarAction;
+      delete window.__gopokeToolbarAction;
     };
   }, []);
 
@@ -1358,6 +1358,7 @@ export default function App() {
 
   return (
     <main className="app-shell" data-platform={platform}>
+      {platform === "darwin" && <div className="macos-drag-bar" />}
       {platform !== "darwin" && (
         <Toolbar runState={runState} onAction={handleToolbarAction} />
       )}
@@ -1714,8 +1715,8 @@ export default function App() {
                       Print special markers to render tables and JSON cards in the Rich tab.
                     </p>
                     <ul className="help-tips">
-                      <li><strong>Table:</strong> <code>{"//gopad:table [{\"col\":\"val\"}]"}</code></li>
-                      <li><strong>JSON card:</strong> <code>{"//gopad:json {\"key\":\"val\"}"}</code></li>
+                      <li><strong>Table:</strong> <code>{"//gopoke:table [{\"col\":\"val\"}]"}</code></li>
+                      <li><strong>JSON card:</strong> <code>{"//gopoke:json {\"key\":\"val\"}"}</code></li>
                       <li>Marker lines are stripped from Raw output.</li>
                       <li>Rich tab auto-selects when blocks are present.</li>
                       <li>Malformed JSON stays in raw output (no block created).</li>
@@ -1737,7 +1738,7 @@ export default function App() {
         )}
 
         <div className="editor-pane">
-          <GopadMonacoEditor
+          <GopokeMonacoEditor
             code={snippet}
             onCodeChange={setSnippet}
             wsPort={lspPort}
