@@ -31,9 +31,9 @@ jobs:
       - name: Lint (go vet)
         run: go vet ./...
 
-      - name: Unit tests (excluding FR acceptance suite)
+      - name: Unit tests (excluding acceptance + execution integration tests)
         run: |
-          packages="$(go list ./... | grep -v 'gopoke/internal/acceptance$')"
+          packages="$(go list ./... | grep -v 'gopoke/internal/acceptance$' | grep -v 'gopoke/internal/execution$')"
           go test $packages
 
       - name: FR acceptance report
