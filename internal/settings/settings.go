@@ -2,9 +2,9 @@ package settings
 
 // GlobalSettings stores app-wide configuration persisted across sessions.
 type GlobalSettings struct {
-	GoPath             string `json:"goPath"`             // Path to go binary (e.g. /usr/local/go/bin/go). Empty = auto-detect.
-	GoplsPath          string `json:"goplsPath"`          // Path to gopls binary. Empty = auto-detect.
-	StaticcheckPath    string `json:"staticcheckPath"`    // Path to staticcheck binary. Empty = auto-detect.
+	GoPath             string `json:"goPath"`          // Path to go binary (e.g. /usr/local/go/bin/go). Empty = auto-detect.
+	GoplsPath          string `json:"goplsPath"`       // Path to gopls binary. Empty = auto-detect.
+	StaticcheckPath    string `json:"staticcheckPath"` // Path to staticcheck binary. Empty = auto-detect.
 	DefaultTimeoutMS   int64  `json:"defaultTimeoutMS"`
 	MaxOutputBytes     int64  `json:"maxOutputBytes"`
 	GoPathOverride     string `json:"goPathOverride"`
@@ -16,11 +16,11 @@ type GlobalSettings struct {
 }
 
 const (
-	DefaultTimeoutMS   = int64(30000)
-	DefaultMaxOutput   = int64(1_048_576)
-	DefaultFontFamily  = "JetBrains Mono"
-	DefaultFontSize    = 14
-	DefaultTheme       = "Default Dark Modern"
+	DefaultTimeoutMS  = int64(30000)
+	DefaultMaxOutput  = int64(1_048_576)
+	DefaultFontFamily = "JetBrains Mono"
+	DefaultFontSize   = 14
+	DefaultTheme      = "Default Dark Modern"
 )
 
 // Defaults returns GlobalSettings with sensible defaults.

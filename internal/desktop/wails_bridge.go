@@ -89,7 +89,7 @@ type ApplicationService interface {
 
 // WailsBridge exposes backend methods to the Wails frontend.
 type WailsBridge struct {
-	app      ApplicationService
+	app       ApplicationService
 	downloads *download.Manager
 
 	mu          sync.RWMutex
