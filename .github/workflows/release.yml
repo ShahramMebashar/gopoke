@@ -49,18 +49,22 @@ jobs:
             platform: darwin/arm64
             artifact: GoPoke-macos-arm64.zip
             label: macos-arm64
-          - os: macos-13
+            extra_tags: ""
+          - os: macos-latest
             platform: darwin/amd64
             artifact: GoPoke-macos-amd64.zip
             label: macos-amd64
+            extra_tags: ""
           - os: windows-latest
             platform: windows/amd64
             artifact: GoPoke-windows-amd64.zip
             label: windows-amd64
+            extra_tags: ""
           - os: ubuntu-latest
             platform: linux/amd64
             artifact: GoPoke-linux-amd64.tar.gz
             label: linux-amd64
+            extra_tags: ",webkit2_41"
 
     runs-on: ${{ matrix.os }}
     name: build (${{ matrix.label }})
@@ -84,7 +88,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       # ── macOS code signing (optional) ─────────────────────────────────────
       - name: Import macOS signing certificate
@@ -104,10 +108,17 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
           rm certificate.p12
 
+      # ── Frontend (must exist before Wails binding generation) ─────────────
+      - name: Build frontend
+        working-directory: cmd/gopoke/frontend
+        shell: bash
+        run: npm install && npm run build
+
       # ── Build ─────────────────────────────────────────────────────────────
       - name: Build with Wails
         working-directory: cmd/gopoke
-        run: ${{ env.WAILS_CMD }} build -clean -platform ${{ matrix.platform }} -tags wails,desktop,production
+        shell: bash
+        run: ${{ env.WAILS_CMD }} build -clean -platform ${{ matrix.platform }} -tags wails,desktop,production${{ matrix.extra_tags }}
 
       # ── macOS signing & notarization (optional) ───────────────────────────
       - name: Sign macOS app
