@@ -4,6 +4,8 @@ A desktop app for running and iterating on Go snippets quickly — **Tinkerwell 
 
 Write Go code against a real local project, run it instantly, and see output in real time. No terminal juggling, no scratch file management.
 
+![GoPoke Screenshot](art/gopoke.png)
+
 ## Why GoPoke?
 
 Go developers often use ad-hoc scratch files, shell commands, and editor hacks to test ideas. GoPoke eliminates that friction:
